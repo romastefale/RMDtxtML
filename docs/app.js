@@ -12,6 +12,7 @@ const KEY='rmdtxtml-draft-v2';
 const APIKEY='rmdtxtml-api-v1';
 const DEFAULT_API='https://rmdtxtml-api-production.up.railway.app';
 const MAX_BYTES=32768;
+const themeQuery=matchMedia('(prefers-color-scheme: dark)');
 let rtl=false;
 let skipEntityDetection=false;
 
@@ -27,6 +28,7 @@ const ATTRS={
 const BLOCK_SELECTOR='h1,h2,h3,h4,h5,h6,p,footer,pre,ul,ol,blockquote,aside,figure,tg-map,tg-collage,tg-slideshow,table,details,tg-math-block,tg-button-row,hr';
 const BOOL_ATTRS=new Set(['checked','reversed','expandable','tg-spoiler','bordered','striped','compact','open','request-write-access','allow-user-chats','allow-bot-chats','allow-group-chats','allow-channel-chats']);
 
+function syncTheme(){const dark=tg?.colorScheme?tg.colorScheme==='dark':themeQuery.matches;document.documentElement.dataset.theme=dark?'dark':'light';document.documentElement.style.colorScheme=dark?'dark':'light'}
 function say(message){toast.textContent=message;toast.classList.add('show');clearTimeout(say.t);say.t=setTimeout(()=>toast.classList.remove('show'),2200)}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function bytes(s){return new TextEncoder().encode(s).length}
@@ -167,4 +169,6 @@ try{const saved=JSON.parse(localStorage.getItem(KEY)||'null');if(saved?.html){ed
 ed.dir=rtl?'rtl':'ltr';
 $('#rtlState').textContent=rtl?'Ligado':'Desligado';
 $('#entityState').textContent=skipEntityDetection?'Desligada':'Ligada';
+syncTheme();
+if(tg?.onEvent)tg.onEvent('themeChanged',syncTheme);else themeQuery.addEventListener?.('change',syncTheme);
 updateStatus('Pronto');
