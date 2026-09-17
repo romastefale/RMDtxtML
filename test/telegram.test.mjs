@@ -47,9 +47,9 @@ test('rejects dangerous HTML constructs',()=>{
   assert.equal(validateRichHtml('<a href="javascript:alert(1)">x</a>').ok,false);
 });
 
-test('accepts valid Rich HTML',()=>{
-  const result=validateRichHtml('<h2>Title</h2><p><strong>Hello</strong> <tg-spoiler>world</tg-spoiler></p>');
-  assert.equal(result.ok,true);
+test('accepts valid Rich HTML and harmless code-like text',()=>{
+  assert.equal(validateRichHtml('<h2>Title</h2><p><strong>Hello</strong> <tg-spoiler>world</tg-spoiler></p>').ok,true);
+  assert.equal(validateRichHtml('<pre>javascript: onclick= example</pre>').ok,true);
 });
 
 test('enforces Telegram 32768-byte rich-message limit',()=>{
