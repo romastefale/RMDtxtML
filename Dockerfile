@@ -5,7 +5,6 @@ COPY src ./src
 COPY docs ./docs
 COPY test ./test
 RUN node --check docs/app.js \
- && node --check docs/toolbar.js \
  && node --check docs/transfer.js \
  && node --check src/server.mjs \
  && node --check src/telegram.mjs \
