@@ -10,6 +10,21 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
+<svg class="svg-sprite" aria-hidden="true"><defs>
+<symbol id="i-text" viewBox="0 0 24 24"><path d="M5 6V4h14v2M12 4v16M8 20h8"/></symbol>
+<symbol id="i-bold" viewBox="0 0 24 24"><path d="M7 4h6a4 4 0 0 1 0 8H7zm0 8h7a4 4 0 0 1 0 8H7z"/></symbol>
+<symbol id="i-italic" viewBox="0 0 24 24"><path d="M10 4h8M6 20h8M14 4 10 20"/></symbol>
+<symbol id="i-underline" viewBox="0 0 24 24"><path d="M6 4v7a6 6 0 0 0 12 0V4M5 21h14"/></symbol>
+<symbol id="i-strike" viewBox="0 0 24 24"><path d="M17 6.5A6 6 0 0 0 12.5 5C9.5 5 8 6.3 8 8c0 1.5 1.2 2.4 3 3M5 12h14M13 13c2 .5 3 1.3 3 2.8 0 1.8-1.6 3.2-4.5 3.2A7 7 0 0 1 7 17.5"/></symbol>
+<symbol id="i-mark" viewBox="0 0 24 24"><path d="m7 15 8-8 3 3-8 8H7zM14 8l2-2 3 3-2 2M5 20h14"/></symbol>
+<symbol id="i-spoiler" viewBox="0 0 24 24"><path d="M3 12s3.5-5 9-5 9 5 9 5-3.5 5-9 5-9-5-9-5z"/><circle cx="12" cy="12" r="2.5"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="m9 15 6-6M7.5 17.5l-1 1a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0M16.5 6.5l1-1a3.5 3.5 0 0 1 5 5l-4 4a3.5 3.5 0 0 1-5 0" transform="translate(-1)"/></symbol>
+<symbol id="i-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></symbol>
+<symbol id="i-undo" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M4 12h9a6 6 0 0 1 6 6"/></symbol>
+<symbol id="i-redo" viewBox="0 0 24 24"><path d="m16 7 5 5-5 5M20 12h-9a6 6 0 0 0-6 6"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></symbol>
+<symbol id="i-preview" viewBox="0 0 24 24"><path d="M3 12s3.5-5 9-5 9 5 9 5-3.5 5-9 5-9-5-9-5z"/><circle cx="12" cy="12" r="2.5"/></symbol>
+</defs></svg>
 <div class="app">
   <header class="top">
     <button id="back" aria-label="Fechar">‹</button>
@@ -17,43 +32,48 @@
     <button class="send" id="send">Enviar</button>
   </header>
   <nav class="bar" aria-label="Formatação">
-    <select id="block" aria-label="Tipo de bloco">
-      <option value="p">Texto</option><option value="h1">H1</option><option value="h2">H2</option><option value="h3">H3</option><option value="h4">H4</option><option value="h5">H5</option><option value="h6">H6</option><option value="footer">Rodapé</option>
-    </select>
-    <button data-cmd="bold" title="Negrito">B</button><button data-cmd="italic" title="Itálico"><i>I</i></button><button data-cmd="underline" title="Sublinhado"><u>U</u></button><button data-cmd="strikeThrough" title="Riscado"><s>S</s></button>
-    <button id="mark" title="Destaque">▣</button><button id="spoiler" title="Spoiler">◧</button>
-    <span class="sep"></span><button id="link" title="Link">↗</button><button id="code" title="Código">&lt;/&gt;</button>
-    <span class="sep"></span><button data-cmd="undo" title="Desfazer">↶</button><button data-cmd="redo" title="Refazer">↷</button><button id="more" title="Mais recursos">＋</button>
+    <label class="blockPick" title="Tipo de bloco"><svg><use href="#i-text"/></svg><select id="block" aria-label="Tipo de bloco"><option value="p">Texto</option><option value="h1">H1</option><option value="h2">H2</option><option value="h3">H3</option><option value="h4">H4</option><option value="h5">H5</option><option value="h6">H6</option><option value="footer">Rodapé</option></select></label>
+    <button data-cmd="bold" title="Negrito" aria-label="Negrito"><svg><use href="#i-bold"/></svg></button>
+    <button data-cmd="italic" title="Itálico" aria-label="Itálico"><svg><use href="#i-italic"/></svg></button>
+    <button data-cmd="underline" title="Sublinhado" aria-label="Sublinhado"><svg><use href="#i-underline"/></svg></button>
+    <button id="spoiler" title="Spoiler" aria-label="Spoiler"><svg><use href="#i-spoiler"/></svg></button>
+    <button id="link" title="Link" aria-label="Link"><svg><use href="#i-link"/></svg></button>
+    <button id="code" title="Código" aria-label="Código"><svg><use href="#i-code"/></svg></button>
+    <button id="more" title="Mais recursos" aria-label="Mais recursos"><svg><use href="#i-more"/></svg></button>
+    <div class="barOverflow" aria-label="Formatação adicional">
+      <button data-cmd="strikeThrough" title="Riscado" aria-label="Riscado"><svg><use href="#i-strike"/></svg></button>
+      <button id="mark" title="Destaque" aria-label="Destaque"><svg><use href="#i-mark"/></svg></button>
+      <button data-cmd="undo" title="Desfazer" aria-label="Desfazer"><svg><use href="#i-undo"/></svg></button>
+      <button data-cmd="redo" title="Refazer" aria-label="Refazer"><svg><use href="#i-redo"/></svg></button>
+    </div>
   </nav>
   <main class="work">
     <div class="scroll" id="editWrap"><article id="editor" class="editor" contenteditable="true" spellcheck="true"><h2>RMDtxtML</h2><p>Crie uma <strong>Rich Message</strong> usando Rich HTML da Bot API 10.3.</p><blockquote>Edite visualmente, visualize e publique pelo bot.</blockquote></article></div>
     <div class="scroll previewWrap" id="previewWrap"><section class="preview"><span class="tag">Rich Message · HTML</span><div id="preview"></div></section></div>
   </main>
-  <footer class="bottom"><button id="previewBtn" title="Prévia">◉</button><div id="status" class="status">Inicializando…</div><button id="save">Salvar</button></footer>
+  <footer class="bottom"><button id="previewBtn" title="Prévia" aria-label="Prévia"><svg><use href="#i-preview"/></svg></button><div id="status" class="status">Inicializando…</div><button id="save">Salvar</button></footer>
 </div>
-
-<div class="drawer" id="drawer">
-  <aside class="sheet">
-    <div class="sheetHead"><strong>Recursos Rich Message</strong><button id="close" aria-label="Fechar">×</button></div>
-    <section class="group"><div class="groupTitle">Estrutura</div><div class="grid">
-      <button data-action="ul"><b>Marcadores</b><small>Lista simples</small></button><button data-action="ol"><b>Numerada</b><small>Lista ordenada</small></button><button data-action="task"><b>Tarefas</b><small>Checkboxes</small></button>
-      <button data-action="quote"><b>Citação</b><small>Block quote</small></button><button data-action="expandable"><b>Citação expansível</b><small>Recolhível</small></button><button data-action="pullquote"><b>Pull quote</b><small>Trecho em destaque</small></button>
-      <button data-action="details"><b>Detalhes</b><small>Bloco recolhível</small></button><button data-action="pre"><b>Pré-formatado</b><small>Bloco de código</small></button><button data-action="divider"><b>Divisor</b><small>Linha horizontal</small></button>
-      <button data-action="table"><b>Tabela</b><small>Até 20 colunas</small></button><button data-action="math"><b>Fórmula inline</b><small>LaTeX</small></button><button data-action="mathblock"><b>Fórmula em bloco</b><small>LaTeX</small></button>
-    </div></section>
-    <section class="group"><div class="groupTitle">Mídia e localização</div><div class="grid">
-      <button data-action="image"><b>Imagem</b><small>URL HTTPS</small></button><button data-action="video"><b>Vídeo</b><small>URL HTTPS</small></button><button data-action="audio"><b>Áudio</b><small>URL HTTPS</small></button>
-      <button data-action="document"><b>Documento</b><small>Bot API 10.3</small></button><button data-action="map"><b>Mapa</b><small>Latitude e longitude</small></button><button data-action="collage"><b>Collage</b><small>Múltiplas mídias</small></button><button data-action="slideshow"><b>Slideshow</b><small>Sequência de mídias</small></button>
-    </div></section>
-    <section class="group"><div class="groupTitle">Rich text e interação</div><div class="grid">
-      <button data-action="reference"><b>Referência</b><small>Nota referenciável</small></button><button data-action="anchor"><b>Âncora</b><small>Link interno</small></button><button data-action="time"><b>Data/hora</b><small>tg-time</small></button><button data-action="emoji"><b>Custom emoji</b><small>ID do Telegram</small></button><button data-action="button"><b>Botão</b><small>Rich Message button</small></button>
-      <button data-action="rtl"><b>RTL</b><small id="rtlState">Desligado</small></button><button data-action="entities"><b>Detecção automática</b><small id="entityState">Ligada</small></button>
-    </div></section>
-    <section class="group"><div class="groupTitle">Documento</div><div class="grid">
-      <button data-action="export"><b>Exportar</b><small>Rich HTML</small></button><button data-action="import"><b>Importar</b><small>Rich HTML</small></button><button data-action="server"><b>Servidor</b><small>Backend HTTPS</small></button><button class="danger" data-action="reset"><b>Limpar</b><small>Novo documento</small></button>
-    </div></section>
-  </aside>
-</div>
+<div class="drawer" id="drawer"><aside class="sheet">
+  <div class="sheetHead"><strong>Recursos Rich Message</strong><button id="close" aria-label="Fechar">×</button></div>
+  <section class="group"><div class="groupTitle">Formatação adicional</div><div class="quickFormat"><button data-cmd="strikeThrough"><svg><use href="#i-strike"/></svg><span>Riscado</span></button><button data-action="mark"><svg><use href="#i-mark"/></svg><span>Destaque</span></button><button data-cmd="undo"><svg><use href="#i-undo"/></svg><span>Desfazer</span></button><button data-cmd="redo"><svg><use href="#i-redo"/></svg><span>Refazer</span></button></div></section>
+  <section class="group"><div class="groupTitle">Estrutura</div><div class="grid">
+    <button data-action="ul"><b>Marcadores</b><small>Lista simples</small></button><button data-action="ol"><b>Numerada</b><small>Lista ordenada</small></button><button data-action="task"><b>Tarefas</b><small>Checkboxes</small></button>
+    <button data-action="quote"><b>Citação</b><small>Block quote</small></button><button data-action="expandable"><b>Citação expansível</b><small>Recolhível</small></button><button data-action="pullquote"><b>Pull quote</b><small>Trecho em destaque</small></button>
+    <button data-action="details"><b>Detalhes</b><small>Bloco recolhível</small></button><button data-action="pre"><b>Pré-formatado</b><small>Bloco de código</small></button><button data-action="divider"><b>Divisor</b><small>Linha horizontal</small></button>
+    <button data-action="table"><b>Tabela</b><small>Até 20 colunas</small></button><button data-action="math"><b>Fórmula inline</b><small>LaTeX</small></button><button data-action="mathblock"><b>Fórmula em bloco</b><small>LaTeX</small></button>
+  </div></section>
+  <section class="group"><div class="groupTitle">Mídia e localização</div><div class="grid">
+    <button data-action="image"><b>Imagem</b><small>URL HTTPS</small></button><button data-action="video"><b>Vídeo</b><small>URL HTTPS</small></button><button data-action="audio"><b>Áudio</b><small>URL HTTPS</small></button>
+    <button data-action="document"><b>Documento</b><small>Bot API 10.3</small></button><button data-action="map"><b>Mapa</b><small>Latitude e longitude</small></button><button data-action="collage"><b>Collage</b><small>Múltiplas mídias</small></button><button data-action="slideshow"><b>Slideshow</b><small>Sequência de mídias</small></button>
+  </div></section>
+  <section class="group"><div class="groupTitle">Rich text e interação</div><div class="grid">
+    <button data-action="reference"><b>Referência</b><small>Nota referenciável</small></button><button data-action="anchor"><b>Âncora</b><small>Link interno</small></button><button data-action="time"><b>Data/hora</b><small>tg-time</small></button><button data-action="emoji"><b>Custom emoji</b><small>ID do Telegram</small></button><button data-action="button"><b>Botão</b><small>Rich Message button</small></button>
+    <button data-action="rtl"><b>RTL</b><small id="rtlState">Desligado</small></button><button data-action="entities"><b>Detecção automática</b><small id="entityState">Ligada</small></button>
+  </div></section>
+  <section class="group"><div class="groupTitle">Documento</div><div class="grid">
+    <button data-action="export"><b>Exportar</b><small>Rich HTML</small></button><button data-action="import"><b>Importar</b><small>Rich HTML</small></button><button data-action="server"><b>Servidor</b><small>Backend HTTPS</small></button><button class="danger" data-action="reset"><b>Limpar</b><small>Novo documento</small></button>
+  </div></section>
+</aside></div>
 <input id="file" type="file" accept="text/html,.html,.htm" hidden>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script src="./app.js"></script>
