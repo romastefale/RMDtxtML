@@ -138,7 +138,7 @@ const actions={
   reset:()=>{if(confirm('Apagar o rascunho local e iniciar um documento vazio?')){ed.innerHTML='<p><br></p>';rtl=false;skipEntityDetection=false;ed.dir='ltr';localStorage.removeItem(KEY);dirty()}},
   server:()=>{const old=localStorage.getItem(APIKEY)||DEFAULT_API,u=prompt('URL HTTPS do backend',old);if(u!==null&&/^https:\/\//i.test(u)){localStorage.setItem(APIKEY,u.replace(/\/+$/,''));say('Servidor salvo')}}
 };
-$$('[data-action]').forEach(b=>b.onclick=()=>{drawer.classList.remove('open');actions[b.dataset.action]?.()});
+$('[data-action]').forEach(b=>b.onclick=()=>{drawer.classList.remove('open');if(b.dataset.action==='mark')return wrap('mark');actions[b.dataset.action]?.()});
 
 $('#file').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;const text=await f.text();ed.innerHTML=sanitizeRichHtml(text)||'<p><br></p>';e.target.value='';dirty()};
 $('#save').onclick=()=>{const m=metrics();localStorage.setItem(KEY,JSON.stringify({html:m.html,rtl,skipEntityDetection}));updateStatus('Salvo');say('Rascunho salvo')};
