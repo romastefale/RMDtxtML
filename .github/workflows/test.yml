@@ -17,4 +17,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: node --check docs/app.js
+      - run: node --check src/server.mjs
+      - run: node --check src/telegram.mjs
       - run: npm test
