@@ -202,6 +202,14 @@ test('invalid semantic model is rejected without replacing the current document'
     catch(error){return{error:error?.message||String(error),before,after:JSON.stringify(RMD.editor.model())}}
   });
   expect(result.error).toBe('invalid_semantic_model');expect(result.after).toBe(result.before);
+  const unsafe=await page.evaluate(()=>{
+    const before=JSON.stringify(RMD.editor.model());
+    try{
+      RMD.editor.setModel({type:'doc',content:[{type:'paragraph',content:[{type:'text',text:'X',marks:[{type:'link',attrs:{href:'javascript:alert(1)'}}]}]}]},{history:false});
+      return{error:null,before,after:JSON.stringify(RMD.editor.model())}
+    }catch(error){return{error:error?.message||String(error),before,after:JSON.stringify(RMD.editor.model())}}
+  });
+  expect(unsafe.error).toBe('invalid_semantic_model');expect(unsafe.after).toBe(unsafe.before);
   await expect(page.locator('#editor')).toContainText('Preservar')
 });
 
