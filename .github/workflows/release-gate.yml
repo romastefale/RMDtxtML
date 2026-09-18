@@ -1,0 +1,14 @@
+name: Release Gate
+on:
+  push:
+    branches: [draft, main]
+  workflow_dispatch:
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image through mandatory QA gate
+        run: docker build --progress=plain -t rmdtxtml:${{ github.sha }} .
