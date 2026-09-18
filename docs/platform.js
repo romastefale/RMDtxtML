@@ -69,6 +69,9 @@ function dirty(value){
   value?tg.enableClosingConfirmation?.():tg.disableClosingConfirmation?.()
 }
 function keyboard(){if(isTelegram())tg.hideKeyboard?.()}
+function haptic(type='success'){if(isTelegram())tg.HapticFeedback?.notificationOccurred?.(type)}
+function close(){if(isTelegram())tg.close?.();else history.back()}
+function colorScheme(){return isTelegram()&&tg?.colorScheme?tg.colorScheme:(window.matchMedia?.('(prefers-color-scheme: dark)').matches?'dark':'light')}
 function fullscreen(){
   if(!isTelegram())return;
   tg.expand?.();
@@ -77,6 +80,7 @@ function fullscreen(){
 }
 function bindTelegram(){
   if(!isTelegram())return;
+  tg.onEvent?.('themeChanged',()=>emit('theme',colorScheme()));
   tg.onEvent?.('viewportChanged',state=>{syncViewport({stable:state?.isStateStable!==false});emit('viewport',state)});
   tg.onEvent?.('safeAreaChanged',()=>{syncInsets();emit('safearea')});
   tg.onEvent?.('contentSafeAreaChanged',()=>{syncInsets();emit('safearea')});
@@ -122,5 +126,5 @@ async function json(path,{method='GET',body,auth=false}={}){
   return data
 }
 window.RMD=window.RMD||{};
-window.RMD.platform={tg,isTelegram,api,startParam,userId,launch,boot,on,setBack,setMain,dirty,keyboard,fullscreen,syncViewport,syncInsets,cleanStartParam,json};
+window.RMD.platform={tg,isTelegram,api,startParam,userId,launch,boot,on,setBack,setMain,dirty,keyboard,haptic,close,colorScheme,fullscreen,syncViewport,syncInsets,cleanStartParam,json};
 })();
