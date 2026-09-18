@@ -81,7 +81,7 @@ test('inline keyboard validation renders supported publication buttons and rejec
     [{text:'Escolher',type:'switch_inline_query_chosen_chat',query:'busca',allowUserChats:true,allowGroupChats:true}]
   ];
   const checked=validateInlineKeyboard(input);
-  assert.equal(checked.ok,true);assert.deepEqual(checked.keyboard,input);
+  assert.equal(checked.ok,true);assert.deepEqual(checked.keyboard,[input[0],input[1],[{...input[2][0],allowBotChats:false,allowChannelChats:false}]]);
   assert.deepEqual(checked.replyMarkup.inline_keyboard[0][0],{text:'Site',style:'primary',url:'https://example.com'});
   assert.deepEqual(checked.replyMarkup.inline_keyboard[1][0],{text:'Copiar',copy_text:{text:'valor'}});
   assert.deepEqual(checked.replyMarkup.inline_keyboard[1][1],{text:'Off',disabled:{}});
