@@ -1,4 +1,4 @@
-const platform=RMD.platform,tg=platform.tg;
+const platform=RMD.platform;
 platform.boot();
 
 const $=s=>document.querySelector(s);
