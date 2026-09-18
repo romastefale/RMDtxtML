@@ -9,11 +9,11 @@ import {Store} from '../src/store.mjs';
 test('SQLite store claims a transfer exactly once',()=>{
   const store=new Store({env:{},dbPath:':memory:'});
   try{
-    const semantic={schema:2,format:'semantic',model:{type:'doc',content:[{type:'paragraph'}]}};
-    store.createTransfer({token:'a'.repeat(32),html:'<p>x</p>',semantic,expiresAt:Date.now()+60_000});
+    const semantic={schema:2,format:'semantic',model:{type:'doc',content:[{type:'paragraph'}]}},publication={inlineKeyboard:[[{text:'Site',type:'url',url:'https://example.com'}]]};
+    store.createTransfer({token:'a'.repeat(32),html:'<p>x</p>',semantic,publication,expiresAt:Date.now()+60_000});
     const first=store.claimTransfer('a'.repeat(32));
     const second=store.claimTransfer('a'.repeat(32));
-    assert.equal(first.html,'<p>x</p>');assert.deepEqual(first.semantic,semantic);
+    assert.equal(first.html,'<p>x</p>');assert.deepEqual(first.semantic,semantic);assert.deepEqual(first.publication,publication);
     assert.equal(second,null)
   }finally{store.close()}
 });
@@ -60,7 +60,7 @@ test('SQLite transfer table migrates semantic_json without data loss',()=>{
     const store=new Store({env:{},dbPath});
     try{
       const columns=store.db.prepare('PRAGMA table_info(transfers)').all().map(x=>x.name);
-      assert.ok(columns.includes('semantic_json'));
+      assert.ok(columns.includes('semantic_json'));assert.ok(columns.includes('publication_json'));
       const semantic={schema:2,format:'semantic',model:{type:'doc',content:[{type:'paragraph'}]}};
       store.createTransfer({token:'c'.repeat(32),html:'<p>x</p>',semantic,expiresAt:Date.now()+60_000});
       assert.deepEqual(store.claimTransfer('c'.repeat(32)).semantic,semantic)

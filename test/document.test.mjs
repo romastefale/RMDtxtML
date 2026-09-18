@@ -126,3 +126,22 @@ test('loading model version 1 persists the migrated model version 2 exactly once
   const persisted=JSON.parse(localStorage.getItem('rmdtxtml-document-v2'));
   assert.equal(persisted.content.modelVersion,2);assert.deepEqual(persisted.content.model,model('v2'))
 });
+
+
+test('inline keyboard is canonical document state and survives normalize, revision and transfer adoption',async()=>{
+  const{RMD}=await runtime();
+  const keyboard=[[{text:'Site',type:'url',url:'https://example.com',style:'primary'}],[{text:'Copiar',type:'copy_text',copyText:'ABC'}]];
+  const doc=RMD.normalizeDocument({schema:2,format:'semantic',content:{model:model('Oi'),modelVersion:2},options:{inlineKeyboard:keyboard}},{normalizeModel,migrateHtml});
+  assert.deepEqual(doc.options.inlineKeyboard,keyboard);
+  const transfer={html:'<p>Novo</p>',semantic:{schema:2,format:'semantic',modelVersion:2,model:model('Novo')},publication:{inlineKeyboard:keyboard},document:{id:'document_keyboard_01',revision:2}};
+  const adopted=RMD.adoptTransferDocument(doc,transfer,{normalizeModel,migrateHtml,migrateModel:(m)=>m});
+  assert.deepEqual(adopted.options.inlineKeyboard,keyboard);
+  assert.deepEqual(RMD.normalizeInlineKeyboard([[{text:'Callback',type:'callback_data',data:'x'}]]),[])
+});
+
+test('inline keyboard participates in revision snapshots',async()=>{
+  const{RMD}=await runtime(),store=new RMD.DocumentStore();
+  let doc=RMD.normalizeDocument({schema:2,format:'semantic',content:{model:model('A'),modelVersion:2},options:{inlineKeyboard:[[{text:'A',type:'url',url:'https://a.example'}]]}},{normalizeModel,migrateHtml});
+  doc=await store.save(doc,{checkpoint:true,normalizeModel,migrateHtml});
+  assert.deepEqual(doc.revisions.at(-1).options.inlineKeyboard,[[{text:'A',type:'url',url:'https://a.example'}]])
+});

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {authorizedDestinations,destinationId,publicDestinations,resolveDestination,signInitData,telegramCall,validateInitData,validateRichHtml,validateRichMessage} from '../src/telegram.mjs';
+import {authorizedDestinations,destinationId,publicDestinations,resolveDestination,signInitData,telegramCall,validateInitData,validateInlineKeyboard,validateRichHtml,validateRichMessage} from '../src/telegram.mjs';
 
 const token='123456:TEST_TOKEN';
 const now=Date.UTC(2026,8,17,18,0,0);
@@ -71,4 +71,21 @@ test('Rich Message block validation enforces colspan totals and button invariant
   assert.equal(validateRichMessage({blocks:[{type:'buttons',buttons:[{text:'x',url:'https://example.com',style:'link'}]}]}).error,'invalid_button_style');
   assert.equal(validateRichMessage({blocks:[{type:'buttons',buttons:[{text:'x',callback_data:'x'.repeat(65)}]}]}).error,'invalid_callback_data');
   assert.equal(validateRichMessage({blocks:[{type:'buttons',buttons:[{text:'x',callback_data:'ok',style:'link'}]}]}).ok,true)
+});
+
+
+test('inline keyboard validation renders supported publication buttons and rejects callback-only behavior',()=>{
+  const input=[
+    [{text:'Site',type:'url',url:'https://example.com',style:'primary'}],
+    [{text:'Copiar',type:'copy_text',copyText:'valor'},{text:'Off',type:'disabled'}],
+    [{text:'Escolher',type:'switch_inline_query_chosen_chat',query:'busca',allowUserChats:true,allowGroupChats:true}]
+  ];
+  const checked=validateInlineKeyboard(input);
+  assert.equal(checked.ok,true);assert.deepEqual(checked.keyboard,input);
+  assert.deepEqual(checked.replyMarkup.inline_keyboard[0][0],{text:'Site',style:'primary',url:'https://example.com'});
+  assert.deepEqual(checked.replyMarkup.inline_keyboard[1][0],{text:'Copiar',copy_text:{text:'valor'}});
+  assert.deepEqual(checked.replyMarkup.inline_keyboard[1][1],{text:'Off',disabled:{}});
+  assert.deepEqual(checked.replyMarkup.inline_keyboard[2][0].switch_inline_query_chosen_chat,{query:'busca',allow_user_chats:true,allow_group_chats:true});
+  assert.equal(validateInlineKeyboard([[{text:'Callback',type:'callback_data',data:'x'}]]).error,'unsupported_keyboard_button');
+  assert.equal(validateInlineKeyboard([[{text:'Mini App',type:'web_app',url:'http://example.com'}]]).error,'invalid_keyboard_url')
 });

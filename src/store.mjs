@@ -25,6 +25,7 @@ export class Store{
         skip_entities INTEGER NOT NULL DEFAULT 0,
         document_json TEXT,
         semantic_json TEXT,
+        publication_json TEXT,
         created_at INTEGER NOT NULL,
         expires_at INTEGER NOT NULL,
         claimed_at INTEGER
@@ -50,11 +51,12 @@ export class Store{
     `);
     const transferColumns=new Set(this.db.prepare('PRAGMA table_info(transfers)').all().map(row=>String(row.name)));
     if(!transferColumns.has('semantic_json'))this.db.exec('ALTER TABLE transfers ADD COLUMN semantic_json TEXT');
+    if(!transferColumns.has('publication_json'))this.db.exec('ALTER TABLE transfers ADD COLUMN publication_json TEXT');
     const sendColumns=new Set(this.db.prepare('PRAGMA table_info(sends)').all().map(row=>String(row.name)));
     if(!sendColumns.has('payload_hash'))this.db.exec('ALTER TABLE sends ADD COLUMN payload_hash TEXT');
     this.q={
-      addTransfer:this.db.prepare('INSERT INTO transfers(token,html,is_rtl,skip_entities,document_json,semantic_json,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)'),
-      getTransfer:this.db.prepare('SELECT token,html,is_rtl,skip_entities,document_json,semantic_json,created_at,expires_at,claimed_at FROM transfers WHERE token=?'),
+      addTransfer:this.db.prepare('INSERT INTO transfers(token,html,is_rtl,skip_entities,document_json,semantic_json,publication_json,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?)'),
+      getTransfer:this.db.prepare('SELECT token,html,is_rtl,skip_entities,document_json,semantic_json,publication_json,created_at,expires_at,claimed_at FROM transfers WHERE token=?'),
       claimTransfer:this.db.prepare('UPDATE transfers SET claimed_at=? WHERE token=? AND claimed_at IS NULL AND expires_at>?'),
       pruneTransfers:this.db.prepare('DELETE FROM transfers WHERE expires_at<=? OR (claimed_at IS NOT NULL AND claimed_at<=?)'),
       countTransfers:this.db.prepare('SELECT COUNT(*) AS n FROM transfers WHERE claimed_at IS NULL AND expires_at>?'),
@@ -87,13 +89,13 @@ export class Store{
     this.q.putRate.run(key,count,resetsAt);
     return{ok:count<=limit,count,limit,resetsAt}
   }
-  createTransfer({token,html,isRtl=false,skipEntityDetection=false,document=null,semantic=null,expiresAt,now=Date.now()}){
+  createTransfer({token,html,isRtl=false,skipEntityDetection=false,document=null,semantic=null,publication=null,expiresAt,now=Date.now()}){
     this.prune(now);
     const active=Number(this.q.countTransfers.get(now)?.n||0);
     if(active>=1000){
       for(const row of this.q.oldestTransfers.all(now,active-999))this.q.delTransfer.run(row.token)
     }
-    this.q.addTransfer.run(token,html,isRtl?1:0,skipEntityDetection?1:0,document?json(document):null,semantic?json(semantic):null,now,expiresAt);
+    this.q.addTransfer.run(token,html,isRtl?1:0,skipEntityDetection?1:0,document?json(document):null,semantic?json(semantic):null,publication?json(publication):null,now,expiresAt);
     return{token,expiresAt}
   }
   claimTransfer(token,{now=Date.now()}={}){
@@ -111,6 +113,7 @@ export class Store{
         skipEntityDetection:Boolean(row.skip_entities),
         document:row.document_json?parse(row.document_json):null,
         semantic:row.semantic_json?parse(row.semantic_json):null,
+        publication:row.publication_json?parse(row.publication_json):null,
         expiresAt:Number(row.expires_at)
       }
     }catch(error){try{this.db.exec('ROLLBACK')}catch{}throw error}

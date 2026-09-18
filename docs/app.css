@@ -200,6 +200,9 @@ tg-button-row[align="right"]{justify-content:flex-end}
   display:inline-block;color:var(--accent);background:var(--softAccent);border-radius:999px;
   padding:4px 8px;font-size:11px;font-weight:660;margin-bottom:14px
 }
+.previewKeyboard{display:grid;gap:6px;margin-top:16px}
+.previewKeyboardRow{display:flex;gap:6px}
+.previewKeyboard button{flex:1;min-height:40px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit;font-size:13px;font-weight:620;opacity:1}
 .toast{
   position:fixed;left:50%;bottom:max(76px,calc(60px + var(--rmd-content-bottom)));max-width:min(90vw,520px);
   transform:translate(-50%,8px);background:var(--text);color:var(--bg);padding:9px 12px;border-radius:var(--radius);

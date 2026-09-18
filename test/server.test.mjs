@@ -100,14 +100,15 @@ test('confirmed Telegram rejection releases request id for retry',async()=>{
 test('web transfer is durable-store backed, opaque, authenticated and one-time',async()=>{
   await withServer(fetch,async base=>{
     const semantic={schema:2,format:'semantic',modelVersion:2,model:{type:'doc',content:[{type:'heading',attrs:{level:2},content:[{type:'text',text:'Web'}]}]}};
-    const created=await post(base,'/api/transfers',{html:'<h2>Web</h2>',isRtl:true,skipEntityDetection:true,document:{id:'00000000-0000-4000-8000-000000000001',revision:7},semantic});
+    const publication={inlineKeyboard:[[{text:'Site',type:'url',url:'https://example.com'}]]};
+    const created=await post(base,'/api/transfers',{html:'<h2>Web</h2>',isRtl:true,skipEntityDetection:true,document:{id:'00000000-0000-4000-8000-000000000001',revision:7},semantic,publication});
     assert.equal(created.status,201);const c=await created.json();
     assert.match(c.token,/^[A-Za-z0-9_-]{32}$/);assert.equal(c.telegramUrl,`https://t.me/rmdtxtml_test_bot?startapp=${c.token}`);
     const unauthorized=await post(base,'/api/transfers/claim',{token:c.token,initData:'bad'});
     assert.equal(unauthorized.status,401);
     const claimed=await post(base,'/api/transfers/claim',{token:c.token,initData:initData()}),body=await claimed.json();
     assert.equal(claimed.status,200);assert.equal(body.transfer.html,'<h2>Web</h2>');assert.equal(body.transfer.isRtl,true);
-    assert.deepEqual(body.transfer.document,{id:'00000000-0000-4000-8000-000000000001',revision:7});assert.deepEqual(body.transfer.semantic,semantic);assert.ok(body.transfer.expiresAt> Date.now());
+    assert.deepEqual(body.transfer.document,{id:'00000000-0000-4000-8000-000000000001',revision:7});assert.deepEqual(body.transfer.semantic,semantic);assert.deepEqual(body.transfer.publication,publication);assert.ok(body.transfer.expiresAt> Date.now());
     const again=await post(base,'/api/transfers/claim',{token:c.token,initData:initData()});
     assert.equal(again.status,404)
   })
@@ -243,4 +244,47 @@ test('Telegram startup preflight verifies bot identity and menu configuration',a
   assert.deepEqual(result,{username:'rmdtxtml_test_bot',mainMiniApp:true,appUrl:'https://example.com/'});
   assert.deepEqual(calls.map(x=>x.method),['getMe','setChatMenuButton']);
   assert.equal(calls[1].body.menu_button.web_app.url,'https://example.com/')
+});
+
+
+test('POST /api/send validates and forwards traditional inline keyboard separately from Rich Message buttons',async()=>{
+  let captured;
+  const telegramFetch=async(url,options)=>{captured=JSON.parse(options.body);return new Response(JSON.stringify({ok:true,result:{message_id:111}}),{status:200,headers:{'content-type':'application/json'}})};
+  await withServer(telegramFetch,async base=>{
+    const inlineKeyboard=[
+      [{text:'Site',type:'url',url:'https://example.com',style:'primary'}],
+      [{text:'Copiar',type:'copy_text',copyText:'ABC'}]
+    ];
+    const response=await post(base,'/api/send',{initData:initData(),requestId:'request-keyboard-00001',destinationId:'self',html:'<p>Mensagem</p>',inlineKeyboard});
+    assert.equal(response.status,200);
+    assert.deepEqual(captured.reply_markup,{inline_keyboard:[
+      [{text:'Site',style:'primary',url:'https://example.com'}],
+      [{text:'Copiar',copy_text:{text:'ABC'}}]
+    ]});
+    assert.equal(captured.rich_message.html,'<p>Mensagem</p>')
+  })
+});
+
+test('idempotent replay bypasses send rate limit while a new request is still limited',async()=>{
+  let calls=0;
+  const telegramFetch=async()=>{calls++;return new Response(JSON.stringify({ok:true,result:{message_id:120+calls}}),{status:200,headers:{'content-type':'application/json'}})};
+  await withServer(telegramFetch,async base=>{
+    const firstBody={initData:initData(),requestId:'request-rate-safe-0001',destinationId:'self',html:'<p>Um</p>'};
+    const first=await post(base,'/api/send',firstBody);assert.equal(first.status,200);
+    const replay=await post(base,'/api/send',firstBody),replayBody=await replay.json();
+    assert.equal(replay.status,200);assert.equal(replayBody.idempotent,true);assert.equal(calls,1);
+    const second=await post(base,'/api/send',{initData:initData(),requestId:'request-rate-safe-0002',destinationId:'self',html:'<p>Dois</p>'});
+    assert.equal(second.status,429);assert.equal(calls,1)
+  },{SEND_RATE_LIMIT:'1'})
+});
+
+test('same requestId conflicts when only inline keyboard changes',async()=>{
+  let calls=0;
+  const telegramFetch=async()=>{calls++;return new Response(JSON.stringify({ok:true,result:{message_id:131}}),{status:200,headers:{'content-type':'application/json'}})};
+  await withServer(telegramFetch,async base=>{
+    const baseBody={initData:initData(),requestId:'request-keyboard-fp01',destinationId:'self',html:'<p>Mesmo</p>'};
+    const first=await post(base,'/api/send',{...baseBody,inlineKeyboard:[[{text:'A',type:'url',url:'https://a.example'}]]});assert.equal(first.status,200);
+    const second=await post(base,'/api/send',{...baseBody,inlineKeyboard:[[{text:'B',type:'url',url:'https://b.example'}]]}),body=await second.json();
+    assert.equal(second.status,409);assert.equal(body.conflict,true);assert.equal(calls,1)
+  })
 });

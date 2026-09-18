@@ -21,7 +21,7 @@ Documento semântico schema 2
              Telegram Bot API
 ```
 
-O schema representa parágrafos, H1–H6, rodapé, citações, listas/tarefas, código, fórmulas, tabelas, imagem, vídeo, áudio, voice note, documento, collage/slideshow, detalhes, mapas, referências, âncoras, custom emoji e botões. Undo/redo e seleção pertencem ao `EditorState` do ProseMirror, não a snapshots de DOM.
+O schema representa parágrafos, H1–H6, rodapé, citações, listas/tarefas, código, fórmulas, tabelas, imagem, vídeo, áudio, voice note, documento, collage/slideshow, detalhes, mapas, referências, âncoras, custom emoji e botões. O documento também preserva opções de publicação, como teclado inline tradicional, separadas do conteúdo Rich Message. Undo/redo e seleção pertencem ao `EditorState` do ProseMirror, não a snapshots de DOM.
 
 Documentos antigos `schema: 1 / format: rich_html` são migrados para `schema: 2 / format: semantic` ao carregar. Revisões antigas também são convertidas. O formato `.rmdtxtml` schema 2 armazena `content.model`, não HTML.
 
@@ -42,6 +42,8 @@ O build usa esbuild e versões fixadas dos módulos ProseMirror. O Docker compil
 O cliente não escolhe `chat_id`. Após validar `Telegram.WebApp.initData`, o servidor entrega `destinationId` autorizado e resolve internamente o destino antes de `sendRichMessage`.
 
 `SEND_SCOPE` aceita `none`, `self`, `configured` ou `all`. Destinos configurados podem declarar `user_ids`/`users` por usuário; destinos globais exigem opt-in explícito (`public: true`, `users: "*"` ou `ALLOW_GLOBAL_DESTINATIONS=true`).
+
+Teclado inline tradicional é enviado separadamente como `reply_markup`, preservado no `.rmdtxtml` e no handoff Web → Telegram. A interface cria apenas tipos que funcionam sem um handler de callback próprio (`url`, `web_app`, `login_url`, consultas inline, `copy_text` e `disabled`); `callback_data` permanece fora do teclado tradicional para não expor interação sem tratamento.
 
 Web → Telegram transfere duas representações com responsabilidades diferentes:
 

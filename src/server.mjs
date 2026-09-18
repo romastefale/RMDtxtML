@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {readFile,stat} from 'node:fs/promises';
 import {Store} from './store.mjs';
-import {publicDestinations,resolveDestination,telegramCall,validateInitData,validateRichHtml,validateRichMessage} from './telegram.mjs';
+import {publicDestinations,resolveDestination,telegramCall,validateInitData,validateInlineKeyboard,validateRichHtml,validateRichMessage} from './telegram.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../docs');
 const version=process.env.APP_VERSION||'1.1.0-rc.1';
@@ -54,7 +54,7 @@ function transferDocument(input){
 }
 function validRequestId(value){return typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_-]{15,79}$/.test(value)}
 function enabled(value){return /^(1|true|yes|on)$/i.test(String(value||''))}
-function sendFingerprint({chatId,richMessage,disableNotification=false,protectContent=false}){return crypto.createHash('sha256').update(JSON.stringify({chatId:String(chatId),richMessage,disableNotification:Boolean(disableNotification),protectContent:Boolean(protectContent)})).digest('hex')}
+function sendFingerprint({chatId,richMessage,replyMarkup=null,disableNotification=false,protectContent=false}){return crypto.createHash('sha256').update(JSON.stringify({chatId:String(chatId),richMessage,replyMarkup,disableNotification:Boolean(disableNotification),protectContent:Boolean(protectContent)})).digest('hex')}
 function transferSemantic(input){
   if(input===undefined||input===null)return null;
   if(typeof input!=='object'||input.schema!==2||input.format!=='semantic'||!input.model||typeof input.model!=='object')return false;
@@ -69,16 +69,17 @@ async function createTransfer(req,res,{botToken,env,fetchImpl,headers,data}){
   if(!trustedOrigin(req,env))return json(res,403,{ok:false,error:'Origem não autorizada'},headers);
   const gate=limit(data,'transfer:'+clientIp(req),env.TRANSFER_RATE_LIMIT);
   if(!gate.ok)return json(res,429,{ok:false,error:'Muitas transferências; tente novamente em instantes'},{...headers,'retry-after':gate.retryAfter});
-  const input=await bodyJson(req),checked=validateRichHtml(input.html),semantic=transferSemantic(input.semantic);
+  const input=await bodyJson(req),checked=validateRichHtml(input.html),semantic=transferSemantic(input.semantic),keyboard=validateInlineKeyboard(input.publication?.inlineKeyboard);
   if(!checked.ok)return json(res,400,{ok:false,error:`Conteúdo inválido: ${checked.error}`},headers);
   if(semantic===false)return json(res,400,{ok:false,error:'Documento semântico inválido'},headers);
+  if(!keyboard.ok)return json(res,400,{ok:false,error:`Teclado inline inválido: ${keyboard.error}`},headers);
   let username;
   try{username=await botUsername(botToken,env,fetchImpl)}catch{return json(res,502,{ok:false,error:'Não foi possível identificar o bot'},headers)}
   if(!username)return json(res,503,{ok:false,error:'Bot sem username configurado'},headers);
   const token=crypto.randomBytes(24).toString('base64url');
   const ttl=Math.max(60,Math.min(3600,Number(env.TRANSFER_TTL_SECONDS||900)));
   const expiresAt=Date.now()+ttl*1000;
-  data.createTransfer({token,html:checked.html,isRtl:input.isRtl===true,skipEntityDetection:input.skipEntityDetection===true,document:transferDocument(input.document),semantic,expiresAt});
+  data.createTransfer({token,html:checked.html,isRtl:input.isRtl===true,skipEntityDetection:input.skipEntityDetection===true,document:transferDocument(input.document),semantic,publication:keyboard.keyboard.length?{inlineKeyboard:keyboard.keyboard}:null,expiresAt});
   return json(res,201,{ok:true,token,expiresAt,telegramUrl:`https://t.me/${encodeURIComponent(username)}?startapp=${token}`},headers)
 }
 
@@ -114,22 +115,23 @@ async function send(req,res,{token,env,fetchImpl,headers,data}){
   if(!validated.ok)return json(res,401,{ok:false,error:`Sessão Telegram inválida: ${validated.error}`},headers);
   const userId=validated?.user?.id===undefined?'':String(validated.user.id);
   if(!userId)return json(res,401,{ok:false,error:'Sessão Telegram sem usuário'},headers);
-  const gate=limit(data,'send:'+userId,env.SEND_RATE_LIMIT,{fallback:20});
-  if(!gate.ok)return json(res,429,{ok:false,error:'Muitos envios; tente novamente em instantes'},{...headers,'retry-after':gate.retryAfter});
   const requestId=typeof input.requestId==='string'?input.requestId:'';
   if(!validRequestId(requestId))return json(res,400,{ok:false,error:'requestId inválido'},headers);
   const chatId=resolveDestination(input.destinationId,validated,env,token);
   if(!chatId)return json(res,403,{ok:false,error:'Destino não autorizado para esta Mini App'},headers);
   const legacy=input.richMessage===undefined&&typeof input.html==='string'?{html:input.html,is_rtl:input.isRtl===true,skip_entity_detection:input.skipEntityDetection===true}:input.richMessage;
-  const checked=validateRichMessage(legacy);
+  const checked=validateRichMessage(legacy),keyboard=validateInlineKeyboard(input.inlineKeyboard);
   if(!checked.ok)return json(res,400,{ok:false,error:`Conteúdo inválido: ${checked.error}`},headers);
-  const richMessage=checked.richMessage;
-  const fingerprint=sendFingerprint({chatId,richMessage,disableNotification:input.disableNotification===true,protectContent:input.protectContent===true});
+  if(!keyboard.ok)return json(res,400,{ok:false,error:`Teclado inline inválido: ${keyboard.error}`},headers);
+  const richMessage=checked.richMessage,replyMarkup=keyboard.replyMarkup;
+  const fingerprint=sendFingerprint({chatId,richMessage,replyMarkup,disableNotification:input.disableNotification===true,protectContent:input.protectContent===true});
   data.prune();
   const previous=data.sendState(userId,requestId);
   if(previous?.payloadHash&&previous.payloadHash!==fingerprint)return json(res,409,{ok:false,error:'requestId já utilizado para outro conteúdo',requestId,conflict:true},headers);
   if(previous?.state==='done')return json(res,200,{ok:true,result:previous.response,idempotent:true},headers);
   if(previous?.state==='pending'||previous?.state==='uncertain')return json(res,409,{ok:false,error:'Este envio já foi iniciado; o resultado anterior ainda é indeterminado',requestId,uncertain:true},headers);
+  const gate=limit(data,'send:'+userId,env.SEND_RATE_LIMIT,{fallback:20});
+  if(!gate.ok)return json(res,429,{ok:false,error:'Muitos envios; tente novamente em instantes'},{...headers,'retry-after':gate.retryAfter});
   if(!data.beginSend(userId,requestId,fingerprint)){
     const current=data.sendState(userId,requestId);
     if(current?.payloadHash&&current.payloadHash!==fingerprint)return json(res,409,{ok:false,error:'requestId já utilizado para outro conteúdo',requestId,conflict:true},headers);
@@ -137,7 +139,7 @@ async function send(req,res,{token,env,fetchImpl,headers,data}){
     return json(res,409,{ok:false,error:'Este envio já está em processamento',requestId},headers)
   }
   try{
-    const result=await telegramCall(token,'sendRichMessage',{chat_id:chatId,rich_message:richMessage,disable_notification:input.disableNotification===true,protect_content:input.protectContent===true},{fetchImpl});
+    const result=await telegramCall(token,'sendRichMessage',{chat_id:chatId,rich_message:richMessage,...(replyMarkup?{reply_markup:replyMarkup}:{}),disable_notification:input.disableNotification===true,protect_content:input.protectContent===true},{fetchImpl});
     data.completeSend(userId,requestId,result.result);
     return json(res,200,{ok:true,result:result.result,requestId},headers)
   }catch(error){

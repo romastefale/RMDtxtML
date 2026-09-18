@@ -27,6 +27,7 @@ function syncDoc(){
   doc.content.model=core.model();
   doc.options.isRtl=rtl;
   doc.options.skipEntityDetection=skipEntityDetection;
+  doc.options.inlineKeyboard=RMD.normalizeInlineKeyboard(doc.options.inlineKeyboard);
   return doc
 }
 async function persistDocument({checkpoint=false,label='Salvo'}={}){
@@ -45,7 +46,7 @@ const core=new RMD.Editor(ed,{change:dirty});RMD.editor=core;
 const menuIcons={
   ul:'list',ol:'list',task:'list',quote:'quote',expandable:'quote',pullquote:'quote',details:'file',pre:'code',divider:'text',table:'table',
   math:'text',mathblock:'text',image:'media',video:'media',audio:'media',voice:'media',document:'file',map:'media',collage:'media',slideshow:'media',
-  reference:'file',anchor:'link',time:'text',emoji:'media',button:'button',rtl:'settings',entities:'settings',
+  reference:'file',anchor:'link',time:'text',emoji:'media',button:'button',keyboard:'button',keyboardclear:'clear',rtl:'settings',entities:'settings',
   export:'file',exporthtml:'code',import:'file',revision:'file',reset:'settings'
 };
 for(const b of $$('[data-action]')){
@@ -118,6 +119,65 @@ drawer.addEventListener('keydown',e=>{
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!drawer.classList.contains('open')&&previewOpen){e.preventDefault();closePreview()}});
 
+function keyboardButtons(){
+  return RMD.normalizeInlineKeyboard(doc?.options?.inlineKeyboard)
+}
+function keyboardTelegramPreview(){
+  const root=document.createElement('div');root.className='previewKeyboard';
+  for(const row of keyboardButtons()){
+    const line=document.createElement('div');line.className='previewKeyboardRow';
+    for(const item of row){const b=document.createElement('button');b.type='button';b.disabled=true;b.textContent=item.text;line.appendChild(b)}
+    root.appendChild(line)
+  }
+  return root
+}
+function keyboardButton(initial={}){
+  const supported=['url','web_app','login_url','switch_inline_query','switch_inline_query_current_chat','switch_inline_query_chosen_chat','copy_text','disabled'];
+  const type=(prompt('Tipo: '+supported.join(', '),initial.type||'url')||'').trim();
+  if(!supported.includes(type)){say('Tipo de teclado não suportado');return null}
+  const text=prompt('Texto do botão',initial.text||'Abrir');if(!text?.trim())return null;
+  const button={text:text.trim().slice(0,64),type};
+  const style=(prompt('Estilo opcional: danger, success, primary',initial.style||'')||'').trim();
+  if(style){if(!['danger','success','primary'].includes(style))return say('Estilo inválido'),null;button.style=style}
+  if(type==='url'||type==='web_app'||type==='login_url'){
+    const value=prompt(type==='url'?'URL HTTP/HTTPS ou tg://':'URL HTTPS',initial.url||'https://');
+    if(value===null)return null;
+    if(type==='url'?!/^(https?:\/\/|tg:\/\/)/i.test(value):!/^https:\/\//i.test(value))return say('URL não suportada'),null;
+    button.url=value
+  }else if(type==='copy_text'){
+    const value=prompt('Texto para copiar',initial.copyText||'Texto');if(value===null||!value)return null;button.copyText=value.slice(0,256)
+  }else if(type==='switch_inline_query'||type==='switch_inline_query_current_chat'){
+    button.query=prompt('Consulta inline',initial.query||'')||''
+  }else if(type==='switch_inline_query_chosen_chat'){
+    button.query=prompt('Consulta inline',initial.query||'')||'';
+    button.allowUserChats=confirm('Permitir chats privados de usuários?');
+    button.allowBotChats=confirm('Permitir chats com bots?');
+    button.allowGroupChats=confirm('Permitir grupos?');
+    button.allowChannelChats=confirm('Permitir canais?')
+  }
+  return button
+}
+function manageKeyboard(){
+  if(!doc)return;
+  const rows=keyboardButtons(),positions=[];rows.forEach((row,ri)=>row.forEach((button,bi)=>positions.push({ri,bi,button})));
+  const mode=(prompt('Teclado inline: adicionar, editar, remover ou limpar',positions.length?'editar':'adicionar')||'').trim().toLowerCase();
+  if(mode==='adicionar'){
+    const button=keyboardButton();if(!button)return;rows.push([button])
+  }else if(mode==='editar'){
+    if(!positions.length)return say('Nenhum botão para editar');
+    const choice=Number(prompt('Número do botão:\n'+positions.map((x,i)=>`${i+1}. ${x.button.text}`).join('\n'),'1'))-1;
+    if(!Number.isInteger(choice)||!positions[choice])return say('Botão inválido');
+    const target=positions[choice],button=keyboardButton(target.button);if(!button)return;rows[target.ri][target.bi]=button
+  }else if(mode==='remover'){
+    if(!positions.length)return say('Nenhum botão para remover');
+    const choice=Number(prompt('Número do botão:\n'+positions.map((x,i)=>`${i+1}. ${x.button.text}`).join('\n'),'1'))-1;
+    if(!Number.isInteger(choice)||!positions[choice])return say('Botão inválido');
+    const target=positions[choice];rows[target.ri].splice(target.bi,1);if(!rows[target.ri].length)rows.splice(target.ri,1)
+  }else if(mode==='limpar'){
+    if(!confirm('Remover todo o teclado inline?'))return;rows.length=0
+  }else return;
+  doc.options.inlineKeyboard=RMD.normalizeInlineKeyboard(rows);dirty();say(doc.options.inlineKeyboard.length?'Teclado inline atualizado':'Teclado inline removido')
+}
 const actions={
   mark:()=>wrap('mark'),
   sub:()=>wrap('sub'),
@@ -170,6 +230,8 @@ const actions={
     if(type==='copy_text'){const value=prompt('Texto para copiar','Texto');if(value===null)return;attrs.text=value}
     insertSpec({type:'button_row',attrs:{align:'center'},content:[{type:'button',attrs,content:[textSpec(label)]}]})
   },
+  keyboard:manageKeyboard,
+  keyboardclear:()=>{if(doc&&keyboardButtons().length&&confirm('Remover todo o teclado inline?')){doc.options.inlineKeyboard=[];dirty();say('Teclado inline removido')}},
   rtl:()=>{rtl=!rtl;applyOptions();dirty()},
   entities:()=>{skipEntityDetection=!skipEntityDetection;applyOptions();dirty()},
   export:()=>{syncDoc();const blob=new Blob([RMD.exportDocument(doc)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='RMDtxtML.rmdtxtml';a.click();URL.revokeObjectURL(url)},
@@ -229,7 +291,7 @@ $('#file').onchange=async e=>{
 $('#save').onclick=async()=>{try{await persistDocument({checkpoint:true,label:'Salvo'});say('Checkpoint salvo')}catch{updateStatus('Falha ao salvar');say('Não foi possível salvar')}};
 $('#previewBtn').onclick=()=>{
   if(previewOpen)return closePreview();
-  platform.keyboard();previewOpen=true;const rendered=renderCurrent();$('#preview').innerHTML=rendered.previewHtml;$('#preview').dir=rtl?'rtl':'ltr';$('#previewMechanism').textContent=rendered.mechanism;
+  platform.keyboard();previewOpen=true;const rendered=renderCurrent(),preview=$('#preview');preview.innerHTML=rendered.previewHtml;preview.dir=rtl?'rtl':'ltr';const keyboard=keyboardTelegramPreview();if(keyboard.childElementCount)preview.appendChild(keyboard);$('#previewMechanism').textContent=rendered.mechanism;
   $('#previewWrap').classList.add('open');$('#editWrap').hidden=true;$('#previewBtn').innerHTML='<svg><use href="#i-edit"/></svg>';$('#previewBtn').setAttribute('aria-pressed','true');$('#previewBtn').setAttribute('aria-label','Voltar à edição');
   updateStatus('Prévia');syncBack()
 };
@@ -244,7 +306,7 @@ async function sendMessage(){
   if(!sendRequestId)sendRequestId=crypto.randomUUID?.()||('send-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
   status.textContent='Enviando…';platform.setMain({text:'Enviando…',visible:true,enabled:false,busy:true,onClick:sendMessage});
   try{
-    const rendered=renderCurrent();await platform.json('/api/send',{method:'POST',auth:true,body:{requestId:sendRequestId,destinationId,richMessage:rendered.richMessage}});
+    const rendered=renderCurrent();await platform.json('/api/send',{method:'POST',auth:true,body:{requestId:sendRequestId,destinationId,richMessage:rendered.richMessage,inlineKeyboard:keyboardButtons()}});
     sendRequestId='';platform.setMain({text:'Enviar',visible:true,enabled:true,busy:false,onClick:sendMessage});updateStatus('Enviado');say('Rich Message enviada');platform.haptic('success');
   }catch(error){platform.setMain({text:'Enviar',visible:true,enabled:true,busy:false,onClick:sendMessage});updateStatus(error?.info?.uncertain?'Resultado indeterminado':'Falha');say(error instanceof Error?error.message:'Falha no envio');platform.haptic('error')}
 }
@@ -290,7 +352,7 @@ const application={
   metrics,
   maxText:MAX_TEXT,
   document:()=>doc,
-  options:()=>({isRtl:rtl,skipEntityDetection}),
+  options:()=>({isRtl:rtl,skipEntityDetection,inlineKeyboard:keyboardButtons()}),
   syncDocument:()=>syncDoc(),
   persist:options=>persistDocument(options),
   setStatus:message=>{status.textContent=String(message||'')},
@@ -304,6 +366,7 @@ const application={
       isRtl:rtl,
       skipEntityDetection,
       document:{id:doc?.id||'',revision:doc?.meta?.revision||0},
+      publication:{inlineKeyboard:keyboardButtons()},
       semantic:{schema:RMD.DOCUMENT_SCHEMA,format:'semantic',modelVersion:RMD.DOCUMENT_MODEL_VERSION,model:core.model()}
     }
   },
@@ -311,7 +374,7 @@ const application={
     doc=RMD.adoptTransferDocument(doc,transfer,modelOptions());
     rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;
     core.setModel(doc.content.model,{history:false});applyOptions();
-    doc=await store.save(doc,{checkpoint:true,normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
+    doc=await store.save(doc,{checkpoint:true,...modelOptions()});
     return doc
   }
 };

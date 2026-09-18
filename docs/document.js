@@ -5,9 +5,32 @@ const now=()=>new Date().toISOString();
 const uid=()=>crypto.randomUUID?.()||('doc-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10));
 const clone=x=>JSON.parse(JSON.stringify(x));
 const defaultNormalize=x=>clone(x&&typeof x==='object'?x:EMPTY);
+function normalizeKeyboard(value){
+  if(!Array.isArray(value))return[];
+  const rows=[];
+  for(const row of value.slice(0,20)){
+    if(!Array.isArray(row))continue;
+    const out=[];
+    for(const button of row.slice(0,8)){
+      if(!button||typeof button!=='object')continue;
+      const text=String(button.text||'').trim().slice(0,64);if(!text)continue;
+      const type=String(button.type||'url');
+      const item={text,type};
+      if(type==='url'||type==='web_app'||type==='login_url')item.url=String(button.url||'').trim().slice(0,2048);
+      else if(type==='copy_text')item.copyText=String(button.copyText??button.copy_text?.text??'').slice(0,256);
+      else if(type==='switch_inline_query'||type==='switch_inline_query_current_chat')item.query=String(button.query||'').slice(0,256);
+      else if(type==='switch_inline_query_chosen_chat'){item.query=String(button.query||'').slice(0,256);item.allowUserChats=button.allowUserChats===true;item.allowBotChats=button.allowBotChats===true;item.allowGroupChats=button.allowGroupChats===true;item.allowChannelChats=button.allowChannelChats===true}
+      else if(type!=='disabled')continue;
+      if(button.style&&['danger','success','primary'].includes(String(button.style)))item.style=String(button.style);
+      out.push(item)
+    }
+    if(out.length)rows.push(out)
+  }
+  return rows
+}
 function base(model=EMPTY){
   const time=now();
-  return{schema:SCHEMA,id:uid(),format:'semantic',content:{model:clone(model),modelVersion:MODEL_VERSION},options:{isRtl:false,skipEntityDetection:false},meta:{createdAt:time,updatedAt:time,revision:0},revisions:[]};
+  return{schema:SCHEMA,id:uid(),format:'semantic',content:{model:clone(model),modelVersion:MODEL_VERSION},options:{isRtl:false,skipEntityDetection:false,inlineKeyboard:[]},meta:{createdAt:time,updatedAt:time,revision:0},revisions:[]};
 }
 function legacyHtml(src){
   if(typeof src?.content?.html==='string')return src.content.html;
@@ -31,6 +54,7 @@ function normalize(input,{normalizeModel=defaultNormalize,migrateHtml,migrateMod
   doc.id=typeof src.id==='string'&&src.id?src.id:doc.id;
   doc.options.isRtl=src.options?.isRtl===true||src.rtl===true;
   doc.options.skipEntityDetection=src.options?.skipEntityDetection===true||src.skipEntityDetection===true;
+  doc.options.inlineKeyboard=normalizeKeyboard(src.options?.inlineKeyboard);
   if(src.schema===SCHEMA&&src.migration&&typeof src.migration==='object')doc.migration=clone(src.migration);
   if(src.source&&typeof src.source==='object')doc.source=clone(src.source);
   if(legacy!==null&&!doc.migration)doc.migration={fromSchema:Number.isSafeInteger(Number(src.schema))?Number(src.schema):0,at:now(),original:clone(src)};
@@ -52,7 +76,7 @@ function normalize(input,{normalizeModel=defaultNormalize,migrateHtml,migrateMod
       at:typeof r.at==='string'?r.at:now(),
       model:revisionModel,
       modelVersion:MODEL_VERSION,
-      options:{isRtl:r.options?.isRtl===true,skipEntityDetection:r.options?.skipEntityDetection===true}
+      options:{isRtl:r.options?.isRtl===true,skipEntityDetection:r.options?.skipEntityDetection===true,inlineKeyboard:normalizeKeyboard(r.options?.inlineKeyboard)}
     }
   });
   doc.meta.updatedAt=typeof src.meta?.updatedAt==='string'?src.meta.updatedAt:now();
@@ -131,6 +155,7 @@ function adoptTransfer(current,transfer,{normalizeModel,migrateHtml,migrateModel
   const next=normalize(same?current:{id:id||undefined,schema:SCHEMA,format:'semantic',content:{model,modelVersion:MODEL_VERSION},meta:{revision:0},revisions:[]},{normalizeModel,migrateHtml,migrateModel});
   next.content.model=normalizeModel?normalizeModel(model):clone(model);
   next.options.isRtl=transfer?.isRtl===true;next.options.skipEntityDetection=transfer?.skipEntityDetection===true;
+  next.options.inlineKeyboard=normalizeKeyboard(transfer?.publication?.inlineKeyboard);
   const revision=Number(meta.revision);if(!same&&Number.isSafeInteger(revision)&&revision>=0)next.meta.revision=revision;
   return next
 }
@@ -143,5 +168,5 @@ function importDocument(text,{normalizeModel,migrateHtml,migrateModel}={}){
   return normalize(raw,{normalizeModel,migrateHtml,migrateModel})
 }
 window.RMD=window.RMD||{};
-Object.assign(window.RMD,{DocumentStore:Store,normalizeDocument:normalize,adoptTransferDocument:adoptTransfer,exportDocument,importDocument,DOCUMENT_SCHEMA:SCHEMA,DOCUMENT_MODEL_VERSION:MODEL_VERSION,EMPTY_DOCUMENT_MODEL:EMPTY});
+Object.assign(window.RMD,{DocumentStore:Store,normalizeDocument:normalize,normalizeInlineKeyboard:normalizeKeyboard,adoptTransferDocument:adoptTransfer,exportDocument,importDocument,DOCUMENT_SCHEMA:SCHEMA,DOCUMENT_MODEL_VERSION:MODEL_VERSION,EMPTY_DOCUMENT_MODEL:EMPTY});
 })();

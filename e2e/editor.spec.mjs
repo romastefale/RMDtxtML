@@ -377,3 +377,26 @@ test('preview and send use the same renderer decision and payload',async({page})
   await page.locator('#previewBtn').click();await expect(page.locator('#previewMechanism')).toHaveText(expected.mechanism);await page.locator('#previewBtn').click();
   await page.evaluate(()=>__tg.MainButton.handler());await expect.poll(()=>body).not.toBeUndefined();expect(body.richMessage).toEqual(expected.richMessage)
 });
+
+
+test('traditional inline keyboard survives preview, Web handoff and Telegram send',async({page})=>{
+  const keyboard=[[{text:'Site',type:'url',url:'https://example.com',style:'primary'}],[{text:'Copiar',type:'copy_text',copyText:'ABC'}]];
+  let transferBody;
+  await page.route('**/api/transfers',async route=>{transferBody=route.request().postDataJSON();await route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({ok:true,token:'k'.repeat(32),expiresAt:Date.now()+60000,telegramUrl:'https://t.me/rmdtxtml_test_bot?startapp='+('k'.repeat(32))})})});
+  await page.route(/https:\/\/t\.me\/.*/,route=>route.fulfill({status:200,contentType:'text/html',body:'<html><body>Telegram</body></html>'}));
+  await web(page);await setEditor(page,'<p>Com teclado</p>');
+  await page.evaluate(value=>{RMD.application.document().options.inlineKeyboard=value},keyboard);
+  await page.locator('#previewBtn').click();
+  await expect(page.locator('.previewKeyboard button')).toHaveCount(2);
+  await expect(page.locator('.previewKeyboard button').first()).toHaveText('Site');
+  await page.locator('#previewBtn').click();
+  await page.locator('#send').click();await expect.poll(()=>transferBody).not.toBeUndefined();
+  expect(transferBody.publication.inlineKeyboard).toEqual(keyboard);
+
+  let sendBody;
+  await page.route('**/api/send',async route=>{sendBody=route.request().postDataJSON();await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,result:{message_id:151}})})});
+  await telegram(page);await setEditor(page,'<p>Com teclado</p>');
+  await page.evaluate(value=>{RMD.application.document().options.inlineKeyboard=value},keyboard);
+  await page.evaluate(()=>__tg.MainButton.handler());await expect.poll(()=>sendBody).not.toBeUndefined();
+  expect(sendBody.inlineKeyboard).toEqual(keyboard)
+});

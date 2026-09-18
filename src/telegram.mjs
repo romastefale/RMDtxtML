@@ -74,6 +74,46 @@ function richTextCount(value){
   return richTextCount(value.text)
 }
 function safeHttp(value){return /^https?:\/\//i.test(String(value||''))}
+function safeButtonUrl(value){return /^(?:https?:\/\/|tg:\/\/)/i.test(String(value||''))}
+export function validateInlineKeyboard(input){
+  if(input===undefined||input===null)return{ok:true,keyboard:[],replyMarkup:null};
+  if(!Array.isArray(input))return{ok:false,error:'inline_keyboard_required'};
+  if(input.length>20)return{ok:false,error:'too_many_keyboard_rows'};
+  const keyboard=[],rendered=[];let total=0;
+  for(const row of input){
+    if(!Array.isArray(row)||!row.length||row.length>8)return{ok:false,error:'invalid_keyboard_row'};
+    const normalizedRow=[],telegramRow=[];
+    for(const raw of row){
+      if(!raw||typeof raw!=='object')return{ok:false,error:'invalid_keyboard_button'};
+      total++;if(total>100)return{ok:false,error:'too_many_keyboard_buttons'};
+      const text=String(raw.text||'').trim(),type=String(raw.type||'url');
+      if(!text||[...text].length>64)return{ok:false,error:'invalid_keyboard_text'};
+      if(!['url','web_app','login_url','switch_inline_query','switch_inline_query_current_chat','switch_inline_query_chosen_chat','copy_text','disabled'].includes(type))return{ok:false,error:'unsupported_keyboard_button'};
+      const button={text,type},out={text};
+      const style=String(raw.style||'');if(style){if(!['danger','success','primary'].includes(style))return{ok:false,error:'invalid_keyboard_style'};button.style=style;out.style=style}
+      if(type==='url'){
+        const value=String(raw.url||'');if(!safeButtonUrl(value))return{ok:false,error:'invalid_keyboard_url'};button.url=value;out.url=value
+      }else if(type==='web_app'){
+        const value=String(raw.url||'');if(!/^https:\/\//i.test(value))return{ok:false,error:'invalid_keyboard_url'};button.url=value;out.web_app={url:value}
+      }else if(type==='login_url'){
+        const value=String(raw.url||'');if(!/^https:\/\//i.test(value))return{ok:false,error:'invalid_keyboard_url'};button.url=value;out.login_url={url:value}
+      }else if(type==='copy_text'){
+        const value=String(raw.copyText??'');if(!value||[...value].length>256)return{ok:false,error:'invalid_copy_text'};button.copyText=value;out.copy_text={text:value}
+      }else if(type==='switch_inline_query'){
+        const query=String(raw.query||'').slice(0,256);button.query=query;out.switch_inline_query=query
+      }else if(type==='switch_inline_query_current_chat'){
+        const query=String(raw.query||'').slice(0,256);button.query=query;out.switch_inline_query_current_chat=query
+      }else if(type==='switch_inline_query_chosen_chat'){
+        const query=String(raw.query||'').slice(0,256);
+        button.query=query;button.allowUserChats=raw.allowUserChats===true;button.allowBotChats=raw.allowBotChats===true;button.allowGroupChats=raw.allowGroupChats===true;button.allowChannelChats=raw.allowChannelChats===true;
+        out.switch_inline_query_chosen_chat={query,...(button.allowUserChats?{allow_user_chats:true}:{}),...(button.allowBotChats?{allow_bot_chats:true}:{}),...(button.allowGroupChats?{allow_group_chats:true}:{}),...(button.allowChannelChats?{allow_channel_chats:true}:{})}
+      }else if(type==='disabled')out.disabled={};
+      normalizedRow.push(button);telegramRow.push(out)
+    }
+    keyboard.push(normalizedRow);rendered.push(telegramRow)
+  }
+  return{ok:true,keyboard,replyMarkup:keyboard.length?{inline_keyboard:rendered}:null}
+}
 function inspectBlocks(blocks){
   if(!Array.isArray(blocks)||!blocks.length)return{ok:false,error:'blocks_required'};
   let count=0,depth=0,media=0,text=0;
