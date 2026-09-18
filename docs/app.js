@@ -29,7 +29,6 @@ const BOOL_ATTRS=new Set(['checked','reversed','expandable','tg-spoiler','border
 function syncTheme(){const inside=!!tg?.initData,dark=inside&&tg.colorScheme?tg.colorScheme==='dark':themeQuery.matches;document.documentElement.dataset.theme=dark?'dark':'light';document.documentElement.style.colorScheme=dark?'dark':'light';if(inside){tg.setHeaderColor?.('bg_color');tg.setBackgroundColor?.('bg_color');tg.setBottomBarColor?.('bottom_bar_bg_color')}}
 function say(message){toast.textContent=message;toast.classList.add('show');clearTimeout(say.t);say.t=setTimeout(()=>toast.classList.remove('show'),2200)}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function bytes(s){return new TextEncoder().encode(s).length}
 function validHref(v){return /^(#|https?:|mailto:|tel:|tg:\/\/user\?id=)/i.test(v)}
 function validSrc(v){return /^https?:\/\//i.test(v)||/^tg:\/\/emoji\?id=/i.test(v)}
 function validButtonUrl(v){return /^https?:\/\//i.test(v)||/^tg:\/\/user\?id=/i.test(v)}
@@ -80,23 +79,19 @@ function metrics(){
 }
 function updateStatus(prefix=''){const m=metrics();status.textContent=`${prefix?prefix+' · ':''}${m.text.toLocaleString('pt-BR')}/${MAX_TEXT.toLocaleString('pt-BR')} caracteres · ${m.blocks} blocos`;status.classList.toggle('danger',m.text>MAX_TEXT)}
 function dirty(){updateStatus('Não salvo')}
-function exec(command,value=null){ed.focus();document.execCommand(command,false,value);dirty()}
-function insertHtml(html){ed.focus();document.execCommand('insertHTML',false,html);dirty()}
-function addBlock(html){insertHtml(html+'<p><br></p>')}
-function wrap(tag,attrs=''){
-  ed.focus();const sel=getSelection();
-  if(!sel?.rangeCount||sel.getRangeAt(0).collapsed)return say('Selecione um trecho primeiro');
-  const range=sel.getRangeAt(0);const el=document.createElement(tag);
-  if(attrs)for(const [k,v] of Object.entries(attrs))el.setAttribute(k,v);
-  try{range.surroundContents(el)}catch{el.append(range.extractContents());range.insertNode(el)}
-  sel.removeAllRanges();sel.addRange(range);dirty();
-}
+const core=new RMD.Editor(ed,{change:dirty});
+function insertHtml(html){core.insert(html)}
+function addBlock(html){core.blockHtml(html)}
+function wrap(tag,attrs={}){if(!core.format(tag,attrs))say('Selecione um trecho primeiro')}
+function run(command){const map={bold:'strong',italic:'em',underline:'u',strikeThrough:'s'};if(map[command])return wrap(map[command]);if(command==='undo')return core.undo();if(command==='redo')return core.redo()}
+function apiBase(){const custom=localStorage.getItem('rmdtxtml-api-v1');if(custom)return custom.replace(/\/+$/,'');if(/^https?:$/.test(location.protocol)&&location.hostname!=='romastefale.github.io')return location.origin;return 'https://rmdtxtml.up.railway.app'}
 function promptHttp(label,initial='https://'){const v=prompt(label,initial);if(v===null)return null;if(!/^https?:\/\//i.test(v)){say('Use uma URL HTTP ou HTTPS');return null}return v}
 function safeName(value){return String(value||'').trim().replace(/[^A-Za-z0-9_-]/g,'-').replace(/-+/g,'-').slice(0,64)}
 
-$$('[data-cmd]').forEach(b=>b.addEventListener('click',()=>exec(b.dataset.cmd)));
-$('#block').addEventListener('change',e=>exec('formatBlock',e.target.value));
-$('#link').onclick=()=>{const text=getSelection()?.toString()||'Telegram',u=prompt('URL','https://t.me/');if(u&&validHref(u))insertHtml(`<a href="${esc(u)}">${esc(text||u)}</a>`);else if(u) say('URL não suportada')};
+document.addEventListener('pointerdown',e=>{if(e.target.closest('.bar,.drawer'))core.remember()},{capture:true});
+$('[data-cmd]').forEach(b=>b.addEventListener('click',()=>run(b.dataset.cmd)));
+$('#block').addEventListener('change',e=>core.block(e.target.value));
+$('#link').onclick=()=>{const r=core.range(),text=r?.toString()||'',u=prompt('URL','https://t.me/');if(!u)return;if(!validHref(u))return say('URL não suportada');if(r&&!r.collapsed)wrap('a',{href:u});else insertHtml(`<a href="${esc(u)}">${esc(text||'Telegram')}</a>`)};
 $('#code').onclick=()=>wrap('code');
 $('#spoiler').onclick=()=>wrap('tg-spoiler');
 $('#mark').onclick=()=>wrap('mark');
@@ -105,8 +100,8 @@ $('#close').onclick=()=>drawer.classList.remove('open');
 drawer.onclick=e=>{if(e.target===drawer)drawer.classList.remove('open')};
 
 const actions={
-  ul:()=>exec('insertUnorderedList'),
-  ol:()=>exec('insertOrderedList'),
+  ul:()=>core.list('ul'),
+  ol:()=>core.list('ol'),
   task:()=>addBlock('<ul><li><input type="checkbox"> Tarefa</li><li><input type="checkbox" checked> Concluída</li></ul>'),
   quote:()=>addBlock('<blockquote>Citação<cite>Autor</cite></blockquote>'),
   expandable:()=>addBlock('<blockquote expandable>Citação expansível<br>Conteúdo adicional<cite>Autor</cite></blockquote>'),
@@ -134,15 +129,14 @@ const actions={
   export:()=>{const h=currentHtml(),blob=new Blob([h],{type:'text/html'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='RMDtxtML-rich-message.html';a.click();URL.revokeObjectURL(url)},
   import:()=>$('#file').click(),
   reset:()=>{if(confirm('Apagar o rascunho local e iniciar um documento vazio?')){ed.innerHTML='<p><br></p>';rtl=false;skipEntityDetection=false;ed.dir='ltr';localStorage.removeItem(KEY);dirty()}},
-  server:()=>{const old=localStorage.getItem('rmdtxtml-api-v1')||location.origin,u=prompt('URL HTTPS do backend',old);if(u!==null&&/^https:\/\//i.test(u)){localStorage.setItem('rmdtxtml-api-v1',u.replace(/\/+$/,''));say('Servidor salvo')}}
+  server:()=>{const old=apiBase(),u=prompt('URL HTTPS do backend',old);if(u!==null&&/^https:\/\//i.test(u)){localStorage.setItem('rmdtxtml-api-v1',u.replace(/\/+$/,''));say('Servidor salvo')}}
 };
 $('[data-action]').forEach(b=>b.onclick=()=>{drawer.classList.remove('open');if(b.dataset.action==='mark')return wrap('mark');actions[b.dataset.action]?.()});
 
-$('#file').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;const text=await f.text();ed.innerHTML=sanitizeRichHtml(text)||'<p><br></p>';e.target.value='';dirty()};
+$('#file').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;const text=await f.text();core.setHtml(sanitizeRichHtml(text)||'<p><br></p>');e.target.value='';dirty()};
 $('#save').onclick=()=>{const m=metrics();localStorage.setItem(KEY,JSON.stringify({html:m.html,rtl,skipEntityDetection}));updateStatus('Salvo');say('Rascunho salvo')};
 $('#previewBtn').onclick=()=>{const wrap=$('#previewWrap'),open=!wrap.classList.contains('open');if(open){$('#preview').innerHTML=currentHtml();$('#preview').dir=rtl?'rtl':'ltr'}wrap.classList.toggle('open',open);$('#editWrap').hidden=open;$('#previewBtn').textContent=open?'✕':'◉';updateStatus(open?'Prévia':'Edição')};
 $('#back').onclick=()=>tg?.close?tg.close():history.back();
-ed.oninput=dirty;
 ed.onpaste=e=>{const h=e.clipboardData?.getData('text/html');if(h){e.preventDefault();insertHtml(sanitizeRichHtml(h))}};
 
 $('#send').onclick=async()=>{
@@ -153,7 +147,7 @@ $('#send').onclick=async()=>{
   const defaultTarget=String(tg.initDataUnsafe?.user?.id||'');
   const chatId=prompt('Destino (ID do chat)',defaultTarget);
   if(!chatId)return;
-  const api=(localStorage.getItem('rmdtxtml-api-v1')||location.origin).replace(/\/+$/,'');
+  const api=apiBase();
   status.textContent='Enviando…';
   try{
     const response=await fetch(api+'/api/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({initData:tg.initData,chatId,html:m.html,isRtl:rtl,skipEntityDetection})});
@@ -163,7 +157,7 @@ $('#send').onclick=async()=>{
   }catch(error){updateStatus('Falha');say(error instanceof Error?error.message:'Falha no envio');tg?.HapticFeedback?.notificationOccurred?.('error')}
 };
 
-try{const saved=JSON.parse(localStorage.getItem(KEY)||'null');if(saved?.html){ed.innerHTML=sanitizeRichHtml(saved.html)||'<p><br></p>';rtl=saved.rtl===true;skipEntityDetection=saved.skipEntityDetection===true}}catch{}
+try{const saved=JSON.parse(localStorage.getItem(KEY)||'null');if(saved?.html){core.setHtml(sanitizeRichHtml(saved.html)||'<p><br></p>');rtl=saved.rtl===true;skipEntityDetection=saved.skipEntityDetection===true}}catch{}
 ed.dir=rtl?'rtl':'ltr';
 $('#rtlState').textContent=rtl?'Ligado':'Desligado';
 $('#entityState').textContent=skipEntityDetection?'Desligada':'Ligada';
