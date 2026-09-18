@@ -1,6 +1,7 @@
 (()=>{'use strict';
 const BLOCK='P H1 H2 H3 H4 H5 H6 FOOTER BLOCKQUOTE ASIDE PRE UL OL FIGURE TG-MAP TG-COLLAGE TG-SLIDESHOW TABLE DETAILS TG-MATH-BLOCK TG-BUTTON-ROW HR'.split(' ');
 const INLINE=new Set(['STRONG','EM','U','S','CODE','MARK','TG-SPOILER','A','SUB','SUP']);
+const ALIAS={B:'STRONG',I:'EM',INS:'U',STRIKE:'S',DEL:'S'};
 const tagName=x=>String(x||'').toUpperCase();
 const inside=(root,node)=>!!node&&(node===root||root.contains(node));
 const unwrap=node=>{const p=node.parentNode;if(!p)return;while(node.firstChild)p.insertBefore(node.firstChild,node);node.remove()};
@@ -76,6 +77,7 @@ class Editor{
   }
   normalize(){
     let changed=false;
+    for(const old of [...this.root.querySelectorAll('b,i,ins,strike,del')]){const name=ALIAS[old.tagName];if(!name)continue;const el=document.createElement(name.toLowerCase());while(old.firstChild)el.append(old.firstChild);old.replaceWith(el);changed=true}
     for(const n of [...this.root.childNodes]){
       if(n.nodeType===Node.TEXT_NODE&&n.data.trim()){const p=document.createElement('p');n.replaceWith(p);p.append(n);changed=true}
       else if(n.nodeType===Node.ELEMENT_NODE&&n.tagName==='DIV'){const p=document.createElement('p');while(n.firstChild)p.append(n.firstChild);n.replaceWith(p);changed=true}
