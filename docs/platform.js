@@ -35,7 +35,7 @@ function syncInsets(){
 }
 function syncViewport({stable=true}={}){
   let height=0;
-  if(isTelegram())height=stable?(Number(tg?.viewportStableHeight)||Number(tg?.viewportHeight)):(Number(tg?.viewportHeight)||Number(tg?.viewportStableHeight));
+  if(isTelegram()){if(stable)height=Number(tg?.viewportStableHeight)||Number(tg?.viewportHeight)}
   else height=Number(window.visualViewport?.height)||Number(window.innerHeight);
   if(height>0)px('--rmd-app-height',height);
   root.dataset.expanded=isTelegram()&&tg?.isExpanded?'true':'false';
