@@ -262,7 +262,7 @@ class Editor{
   format(tag,attrs={}){
     const type=schema.marks[markMap[String(tag||'').toLowerCase()]];if(!type)return false;
     const sel=this.view.state.selection;if(sel.empty)return false;
-    return toggleMark(type,attrs)(this.view.state,this.view.dispatch,this.view)
+    const ok=toggleMark(type,attrs)(this.view.state,this.view.dispatch,this.view);if(ok)this.view.focus();return ok
   }
   clear(){
     const {from,to,empty}=this.view.state.selection;if(empty)return false;
@@ -272,7 +272,7 @@ class Editor{
     const raw=String(tag||'').toLowerCase();let type=schema.nodes.paragraph,attrs=null;
     if(/^h[1-6]$/.test(raw)){type=schema.nodes.heading;attrs={level:Number(raw[1])}}
     else if(raw==='footer')type=schema.nodes.footer;else if(raw!=='p')return false;
-    return setBlockType(type,attrs)(this.view.state,this.view.dispatch,this.view)
+    const ok=setBlockType(type,attrs)(this.view.state,this.view.dispatch,this.view);if(ok)this.view.focus();return ok
   }
   list(tag){
     const type=String(tag).toLowerCase()==='ol'?schema.nodes.ordered_list:schema.nodes.bullet_list;
@@ -280,19 +280,19 @@ class Editor{
     for(let d=$from.depth;d>0;d--){
       const n=$from.node(d);
       if(n.type===schema.nodes.bullet_list||n.type===schema.nodes.ordered_list){
-        if(n.type===type)return liftListItem(schema.nodes.list_item)(this.view.state,this.view.dispatch,this.view);
+        if(n.type===type){const ok=liftListItem(schema.nodes.list_item)(this.view.state,this.view.dispatch,this.view);if(ok)this.view.focus();return ok}
         const pos=$from.before(d);this.view.dispatch(this.view.state.tr.setNodeMarkup(pos,type,n.type===schema.nodes.ordered_list?n.attrs:null));this.view.focus();return true
       }
     }
-    return wrapInList(type)(this.view.state,this.view.dispatch,this.view)
+    const ok=wrapInList(type)(this.view.state,this.view.dispatch,this.view);if(ok)this.view.focus();return ok
   }
   insert(html){
     const parsed=schema.nodeFromJSON(parseHtml(html)),slice=new Slice(parsed.content,0,0);
     this.view.dispatch(this.view.state.tr.replaceSelection(slice).scrollIntoView());this.view.focus()
   }
   blockHtml(html){this.insert(html)}
-  undo(){return undo(this.view.state,this.view.dispatch,this.view)}
-  redo(){return redo(this.view.state,this.view.dispatch,this.view)}
+  undo(){const ok=undo(this.view.state,this.view.dispatch,this.view);if(ok)this.view.focus();return ok}
+  redo(){const ok=redo(this.view.state,this.view.dispatch,this.view);if(ok)this.view.focus();return ok}
   destroy(){this.view.destroy()}
 }
 
