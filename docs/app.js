@@ -118,7 +118,7 @@ function safeName(value){return String(value||'').trim().replace(/[^A-Za-z0-9_-]
 
 const formatButtons=[
   ['[data-cmd="bold"]','strong'],['[data-cmd="italic"]','em'],['[data-cmd="underline"]','u'],
-  ['[data-cmd="strikeThrough"]','s'],['#spoiler','tg-spoiler'],['#code','code'],['#mark,[data-action="mark"]','mark'],['#link','a']
+  ['[data-cmd="strikeThrough"]','s'],['#spoiler','tg-spoiler'],['#code','code'],['#mark,[data-action="mark"]','mark'],['[data-action="sub"]','sub'],['[data-action="super"]','sup'],['#link','a']
 ];
 function syncEditorUi(){
   const r=core.range();if(!r)return;
@@ -175,6 +175,10 @@ drawer.addEventListener('keydown',e=>{
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!drawer.classList.contains('open')&&previewOpen){e.preventDefault();closePreview()}});
 
 const actions={
+  mark:()=>wrap('mark'),
+  sub:()=>wrap('sub'),
+  super:()=>wrap('sup'),
+  clear:()=>{if(!core.clear())say('Selecione um trecho primeiro')},
   ul:()=>core.list('ul'),
   ol:()=>core.list('ol'),
   task:()=>addBlock('<ul><li><input type="checkbox"> Tarefa</li><li><input type="checkbox" checked> Concluída</li></ul>'),
@@ -208,7 +212,7 @@ const actions={
   reset:async()=>{if(confirm('Apagar o documento atual e iniciar um documento vazio?')){doc=await store.reset({html:'<p><br></p>',sanitize:sanitizeRichHtml});rtl=false;skipEntityDetection=false;core.setHtml(doc.content.html);applyOptions();updateStatus('Novo documento')}} ,
   server:()=>{const old=platform.api(),u=prompt('URL HTTPS do backend',old);if(u!==null&&/^https:\/\//i.test(u)){localStorage.setItem('rmdtxtml-api-v1',u.replace(/\/+$/,''));say('Servidor salvo')}}
 };
-$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();if(b.dataset.action==='mark')return wrap('mark');actions[b.dataset.action]?.()});
+$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();actions[b.dataset.action]?.();queueMicrotask(syncEditorUi)});
 
 $('#file').onchange=async e=>{
   const f=e.target.files?.[0];if(!f)return;
