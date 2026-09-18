@@ -118,7 +118,7 @@ function safeName(value){return String(value||'').trim().replace(/[^A-Za-z0-9_-]
 
 const formatButtons=[
   ['[data-cmd="bold"]','strong'],['[data-cmd="italic"]','em'],['[data-cmd="underline"]','u'],
-  ['[data-cmd="strikeThrough"]','s'],['#spoiler','tg-spoiler'],['#code','code'],['#mark','mark'],['#link','a']
+  ['[data-cmd="strikeThrough"]','s'],['#spoiler','tg-spoiler'],['#code','code'],['#mark,[data-action="mark"]','mark'],['#link','a']
 ];
 function syncEditorUi(){
   const r=core.range();if(!r)return;
