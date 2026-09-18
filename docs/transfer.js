@@ -19,7 +19,7 @@
       status.textContent='Recuperando composição…';
       const response=await fetch(api()+'/api/transfers/claim',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({initData:tg.initData,token})});
       const result=await jsonResponse(response);
-      ed.innerHTML=sanitizeRichHtml(result.transfer.html)||'<p><br></p>';
+      core.setHtml(sanitizeRichHtml(result.transfer.html)||'<p><br></p>');
       rtl=result.transfer.isRtl===true;skipEntityDetection=result.transfer.skipEntityDetection===true;ed.dir=rtl?'rtl':'ltr';
       document.querySelector('#rtlState').textContent=rtl?'Ligado':'Desligado';document.querySelector('#entityState').textContent=skipEntityDetection?'Desligada':'Ligada';
       persist();updateStatus('Importado do Web');say('Composição transferida para o Telegram');
@@ -28,7 +28,7 @@
     finally{setBusy(false,'Enviar')}
   }
   async function openTelegram(){
-    const m=metrics();if(!m.html)return say('Escreva algum conteúdo');if(m.bytes>MAX_BYTES)return say('A mensagem excede 32.768 bytes');
+    const m=metrics();if(!m.html)return say('Escreva algum conteúdo');if(m.text>MAX_TEXT)return say('A mensagem excede 32.768 caracteres');
     setBusy(true,'Preparando…');status.textContent='Preparando Telegram…';
     try{
       const response=await fetch(api()+'/api/transfers',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({html:m.html,isRtl:rtl,skipEntityDetection})});
