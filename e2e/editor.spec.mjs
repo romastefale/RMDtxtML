@@ -43,10 +43,8 @@ async function telegram(page,{path='/',startParam=''}={}){
   await waitReady(page)
 }
 async function setEditor(page,html){
-  await page.locator('#editor').evaluate((el,value)=>{
-    el.innerHTML=value;
-    el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText'}))
-  },html)
+  await page.evaluate(value=>window.RMD.editor.setHtml(value,{history:false}),html);
+  await page.locator('#editor').focus()
 }
 async function selectText(page,text){
   await page.locator('#editor').evaluate((el,needle)=>{
