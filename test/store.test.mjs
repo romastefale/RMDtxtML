@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import {DatabaseSync} from 'node:sqlite';
 import {Store} from '../src/store.mjs';
 
 test('SQLite store claims a transfer exactly once',()=>{
@@ -34,6 +35,36 @@ test('SQLite survives Store reopen on disk',()=>{
       assert.equal(state.state,'uncertain');
       assert.equal(state.updatedAt,now+100)
     }finally{second.close()}
+  }finally{rmSync(dir,{recursive:true,force:true})}
+});
+
+test('SQLite transfer table migrates semantic_json without data loss',()=>{
+  const dir=mkdtempSync(path.join(os.tmpdir(),'rmdtxtml-migrate-')),dbPath=path.join(dir,'state.sqlite');
+  try{
+    const legacy=new DatabaseSync(dbPath);
+    legacy.exec(`
+      CREATE TABLE transfers(
+        token TEXT PRIMARY KEY,
+        html TEXT NOT NULL,
+        is_rtl INTEGER NOT NULL DEFAULT 0,
+        skip_entities INTEGER NOT NULL DEFAULT 0,
+        document_json TEXT,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        claimed_at INTEGER
+      );
+      CREATE TABLE rates(bucket TEXT PRIMARY KEY,count INTEGER NOT NULL,resets_at INTEGER NOT NULL);
+      CREATE TABLE sends(user_id TEXT NOT NULL,request_id TEXT NOT NULL,state TEXT NOT NULL,response_json TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,PRIMARY KEY(user_id,request_id));
+    `);
+    legacy.close();
+    const store=new Store({env:{},dbPath});
+    try{
+      const columns=store.db.prepare('PRAGMA table_info(transfers)').all().map(x=>x.name);
+      assert.ok(columns.includes('semantic_json'));
+      const semantic={schema:2,format:'semantic',model:{type:'doc',content:[{type:'paragraph'}]}};
+      store.createTransfer({token:'c'.repeat(32),html:'<p>x</p>',semantic,expiresAt:Date.now()+60_000});
+      assert.deepEqual(store.claimTransfer('c'.repeat(32)).semantic,semantic)
+    }finally{store.close()}
   }finally{rmSync(dir,{recursive:true,force:true})}
 });
 
