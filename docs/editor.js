@@ -77,6 +77,9 @@ class Editor{
   }
   normalize(){
     let changed=false;
+    for(const old of [...this.root.querySelectorAll('strong,em,u,s,code,mark,tg-spoiler,sub,sup')]){
+      if(!old.textContent&&!old.children.length){old.remove();changed=true}
+    }
     for(const old of [...this.root.querySelectorAll('b,i,ins,strike,del')]){const name=ALIAS[old.tagName];if(!name)continue;const el=document.createElement(name.toLowerCase());while(old.firstChild)el.append(old.firstChild);old.replaceWith(el);changed=true}
     for(const n of [...this.root.childNodes]){
       if(n.nodeType===Node.TEXT_NODE&&n.data.trim()){const p=document.createElement('p');n.replaceWith(p);p.append(n);changed=true}
