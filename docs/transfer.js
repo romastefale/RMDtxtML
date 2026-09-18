@@ -2,7 +2,7 @@
   const tg=window.Telegram?.WebApp;
   const send=document.querySelector('#send');
   if(!send)return;
-  const api=()=> (localStorage.getItem('rmdtxtml-api-v1')||'https://rmdtxtml-api-production.up.railway.app').replace(/\/+$/,'');
+  const api=()=>{const custom=localStorage.getItem('rmdtxtml-api-v1');if(custom)return custom.replace(/\/+$/,'');if(/^https?:$/.test(location.protocol)&&location.hostname!=='romastefale.github.io')return location.origin;return 'https://rmdtxtml.up.railway.app'};
   const startParam=()=>tg?.initDataUnsafe?.start_param||new URLSearchParams(location.search).get('tgWebAppStartParam')||'';
   const setBusy=(busy,label)=>{send.disabled=busy;if(label)send.textContent=label};
   const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify({html:currentHtml(),rtl,skipEntityDetection}))}catch{}};
