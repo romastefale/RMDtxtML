@@ -208,7 +208,7 @@ const actions={
   reset:async()=>{if(confirm('Apagar o documento atual e iniciar um documento vazio?')){doc=await store.reset({html:'<p><br></p>',sanitize:sanitizeRichHtml});rtl=false;skipEntityDetection=false;core.setHtml(doc.content.html);applyOptions();updateStatus('Novo documento')}} ,
   server:()=>{const old=platform.api(),u=prompt('URL HTTPS do backend',old);if(u!==null&&/^https:\/\//i.test(u)){localStorage.setItem('rmdtxtml-api-v1',u.replace(/\/+$/,''));say('Servidor salvo')}}
 };
-$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();if(b.dataset.action==='mark')return wrap('mark');actions[b.dataset.action]?.()});
+$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();if(b.dataset.action==='mark')return wrap('mark');actions[b.dataset.action]?.()});
 
 $('#file').onchange=async e=>{
   const f=e.target.files?.[0];if(!f)return;
