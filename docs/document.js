@@ -76,6 +76,12 @@ class Store{
     next.meta.updatedAt=now();
     await this.put(next);return next
   }
+  async restore(doc,revision,{sanitize}={}){
+    const next=normalize(doc,{sanitize}),target=[...next.revisions].reverse().find(r=>r.revision===revision);
+    if(!target)throw new Error('revision_not_found');
+    next.content.html=target.html;next.options=clone(target.options);next.meta.revision+=1;next.meta.updatedAt=now();
+    next.revisions=[...next.revisions,snapshot(next)].slice(-MAX_REVISIONS);await this.put(next);return next
+  }
   async reset({html='<p><br></p>',sanitize}={}){
     const doc=normalize({content:{html}},{sanitize});await this.put(doc);this.clearLegacy();return doc
   }
