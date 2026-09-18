@@ -60,7 +60,7 @@ class Editor{
   }
   commit(){clearTimeout(this.timer);this.timer=0;this.record()}
   afterInput(){
-    this.normalize();
+    const mark=this.textMark();this.normalize();this.restoreText(mark);
     this.remember();clearTimeout(this.timer);this.timer=setTimeout(()=>this.record(),320);this.change();
   }
   normalize(){
