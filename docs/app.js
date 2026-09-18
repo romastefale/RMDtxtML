@@ -90,14 +90,14 @@ async function persistDocument({checkpoint=false,label='Salvo'}={}){
   if(!doc)return null;
   syncDoc();
   doc=await store.save(doc,{checkpoint,sanitize:sanitizeRichHtml});
-  updateStatus(label);
+  platform.dirty(false);updateStatus(label);
   return doc
 }
 function schedulePersist(){
   clearTimeout(saveTimer);
   saveTimer=setTimeout(()=>{persistDocument({label:'Salvo automaticamente'}).catch(()=>updateStatus('Falha ao salvar'))},700)
 }
-function dirty(){sendRequestId='';updateStatus('Não salvo');if(doc)schedulePersist()}
+function dirty(){sendRequestId='';platform.dirty(true);updateStatus('Não salvo');if(doc)schedulePersist()}
 const core=new RMD.Editor(ed,{change:dirty});
 function insertHtml(html){core.insert(html)}
 function addBlock(html){core.blockHtml(html)}
@@ -113,9 +113,23 @@ $('#link').onclick=()=>{const r=core.range(),text=r?.toString()||'',u=prompt('UR
 $('#code').onclick=()=>wrap('code');
 $('#spoiler').onclick=()=>wrap('tg-spoiler');
 $('#mark').onclick=()=>wrap('mark');
-$('#more').onclick=()=>drawer.classList.add('open');
-$('#close').onclick=()=>drawer.classList.remove('open');
-drawer.onclick=e=>{if(e.target===drawer)drawer.classList.remove('open')};
+let previewOpen=false;
+function syncBack(){
+  if(!platform.isTelegram())return;
+  if(drawer.classList.contains('open'))return platform.setBack(closeDrawer);
+  if(previewOpen)return platform.setBack(closePreview);
+  platform.setBack(null)
+}
+function openDrawer(){platform.keyboard();drawer.classList.add('open');syncBack()}
+function closeDrawer(){drawer.classList.remove('open');syncBack()}
+function closePreview(){
+  if(!previewOpen)return;
+  previewOpen=false;$('#previewWrap').classList.remove('open');$('#editWrap').hidden=false;
+  $('#previewBtn').innerHTML='<svg><use href="#i-preview"/></svg>';updateStatus('Edição');syncBack()
+}
+$('#more').onclick=openDrawer;
+$('#close').onclick=closeDrawer;
+drawer.onclick=e=>{if(e.target===drawer)closeDrawer()};
 
 const actions={
   ul:()=>core.list('ul'),
@@ -171,11 +185,16 @@ $('#file').onchange=async e=>{
   finally{e.target.value=''}
 };
 $('#save').onclick=async()=>{try{await persistDocument({checkpoint:true,label:'Salvo'});say('Checkpoint salvo')}catch{updateStatus('Falha ao salvar');say('Não foi possível salvar')}};
-$('#previewBtn').onclick=()=>{const wrap=$('#previewWrap'),open=!wrap.classList.contains('open');if(open){$('#preview').innerHTML=currentHtml();$('#preview').dir=rtl?'rtl':'ltr'}wrap.classList.toggle('open',open);$('#editWrap').hidden=open;$('#previewBtn').textContent=open?'✕':'◉';updateStatus(open?'Prévia':'Edição')};
+$('#previewBtn').onclick=()=>{
+  if(previewOpen)return closePreview();
+  platform.keyboard();previewOpen=true;$('#preview').innerHTML=currentHtml();$('#preview').dir=rtl?'rtl':'ltr';
+  $('#previewWrap').classList.add('open');$('#editWrap').hidden=true;$('#previewBtn').textContent='✕';
+  updateStatus('Prévia');syncBack()
+};
 $('#back').onclick=()=>platform.isTelegram()?tg?.close?.():history.back();
 ed.onpaste=e=>{const h=e.clipboardData?.getData('text/html');if(h){e.preventDefault();insertHtml(sanitizeRichHtml(h))}};
 
-$('#send').onclick=async()=>{
+async function sendMessage(){
   const m=metrics();
   if(!m.html)return say('Escreva algum conteúdo');
   if(m.text>MAX_TEXT)return say('A mensagem excede 32.768 caracteres');
@@ -184,12 +203,14 @@ $('#send').onclick=async()=>{
   const chatId=prompt('Destino (ID do chat)',defaultTarget);
   if(!chatId)return;
   if(!sendRequestId)sendRequestId=crypto.randomUUID?.()||('send-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
-  status.textContent='Enviando…';
+  status.textContent='Enviando…';platform.setMain({text:'Enviando…',visible:true,enabled:false,busy:true,onClick:sendMessage});
   try{
     await platform.json('/api/send',{method:'POST',auth:true,body:{requestId:sendRequestId,chatId,html:m.html,isRtl:rtl,skipEntityDetection}});
-    sendRequestId='';updateStatus('Enviado');say('Rich Message enviada');tg?.HapticFeedback?.notificationOccurred?.('success');
-  }catch(error){updateStatus(error?.info?.uncertain?'Resultado indeterminado':'Falha');say(error instanceof Error?error.message:'Falha no envio');tg?.HapticFeedback?.notificationOccurred?.('error')}
-};
+    sendRequestId='';platform.setMain({text:'Enviar',visible:true,enabled:true,busy:false,onClick:sendMessage});updateStatus('Enviado');say('Rich Message enviada');tg?.HapticFeedback?.notificationOccurred?.('success');
+  }catch(error){platform.setMain({text:'Enviar',visible:true,enabled:true,busy:false,onClick:sendMessage});updateStatus(error?.info?.uncertain?'Resultado indeterminado':'Falha');say(error instanceof Error?error.message:'Falha no envio');tg?.HapticFeedback?.notificationOccurred?.('error')}
+}
+$('#send').onclick=sendMessage;
+if(platform.isTelegram())platform.setMain({text:'Enviar',visible:true,enabled:true,onClick:sendMessage});
 
 function applyOptions(){
   ed.dir=rtl?'rtl':'ltr';
@@ -200,7 +221,7 @@ async function initDocument(){
   const initial=sanitizeRichHtml(ed.innerHTML)||'<p><br></p>';
   const loaded=await store.load({initialHtml:initial,sanitize:sanitizeRichHtml});
   doc=loaded.doc;rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;
-  core.setHtml(doc.content.html);applyOptions();
+  core.setHtml(doc.content.html);applyOptions();platform.dirty(false);syncBack();
   updateStatus(loaded.migrated?'Rascunho migrado':'Pronto');
   return doc
 }
@@ -208,3 +229,4 @@ syncTheme();themeQuery.addEventListener?.('change',syncTheme);tg?.onEvent?.('the
 RMD.ready=initDocument();
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')persistDocument({label:'Salvo automaticamente'}).catch(()=>{})});
 window.addEventListener('pagehide',()=>{persistDocument({label:'Salvo automaticamente'}).catch(()=>{})});
+platform.on('active',active=>{if(!active)persistDocument({label:'Salvo automaticamente'}).catch(()=>{})});
