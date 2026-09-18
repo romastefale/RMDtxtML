@@ -212,6 +212,17 @@ test('caret and focus survive viewport resize and theme changes dynamically',asy
   await page.emulateMedia({colorScheme:'light'});await expect(page.locator('html')).toHaveAttribute('data-theme','light')
 });
 
+test('invalid semantic model is rejected without replacing the current document',async({page})=>{
+  await web(page);await setEditor(page,'<p>Preservar</p>');
+  const result=await page.evaluate(()=>{
+    const before=JSON.stringify(RMD.editor.model());
+    try{RMD.editor.setModel({type:'doc',content:[{type:'unknown_node'}]},{history:false});return{error:null,before,after:JSON.stringify(RMD.editor.model())}}
+    catch(error){return{error:error?.message||String(error),before,after:JSON.stringify(RMD.editor.model())}}
+  });
+  expect(result.error).toBe('invalid_semantic_model');expect(result.after).toBe(result.before);
+  await expect(page.locator('#editor')).toContainText('Preservar')
+});
+
 test('semantic empty document is blocked while non-text structural content is valid',async({page})=>{
   let calls=0;
   await page.route('**/api/transfers',async route=>{
