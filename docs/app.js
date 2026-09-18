@@ -8,11 +8,12 @@ const ed=$('#editor');
 const status=$('#status');
 const drawer=$('#drawer');
 const toast=$('#toast');
-const KEY='rmdtxtml-draft-v2';
 const MAX_TEXT=32768;
 const themeQuery=matchMedia('(prefers-color-scheme: dark)');
 let rtl=false;
 let skipEntityDetection=false;
+const store=new RMD.DocumentStore();
+let doc=null,saveTimer=0;
 
 const ALIASES={B:'STRONG',I:'EM',INS:'U',STRIKE:'S',DEL:'S'};
 const TAGS=new Set('A B STRONG I EM U INS S STRIKE DEL CODE PRE MARK SUB SUP TG-SPOILER TG-REFERENCE TG-EMOJI TG-TIME TG-MATH H1 H2 H3 H4 H5 H6 P FOOTER HR UL OL LI INPUT BR BLOCKQUOTE CITE ASIDE IMG VIDEO AUDIO TG-DOCUMENT FIGURE FIGCAPTION TG-MAP TG-COLLAGE TG-SLIDESHOW TABLE CAPTION THEAD TBODY TR TH TD DETAILS SUMMARY TG-MATH-BLOCK TG-BUTTON TG-BUTTON-ROW'.split(' '));
@@ -79,7 +80,25 @@ function metrics(){
   return {html:h,text:[...d.body.textContent].length,blocks:d.body.querySelectorAll(BLOCK_SELECTOR).length};
 }
 function updateStatus(prefix=''){const m=metrics();status.textContent=`${prefix?prefix+' · ':''}${m.text.toLocaleString('pt-BR')}/${MAX_TEXT.toLocaleString('pt-BR')} caracteres · ${m.blocks} blocos`;status.classList.toggle('danger',m.text>MAX_TEXT)}
-function dirty(){updateStatus('Não salvo')}
+function syncDoc(){
+  if(!doc)return null;
+  doc.content.html=currentHtml();
+  doc.options.isRtl=rtl;
+  doc.options.skipEntityDetection=skipEntityDetection;
+  return doc
+}
+async function persistDocument({checkpoint=false,label='Salvo'}={}){
+  if(!doc)return null;
+  syncDoc();
+  doc=await store.save(doc,{checkpoint,sanitize:sanitizeRichHtml});
+  updateStatus(label);
+  return doc
+}
+function schedulePersist(){
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>{persistDocument({label:'Salvo automaticamente'}).catch(()=>updateStatus('Falha ao salvar'))},700)
+}
+function dirty(){updateStatus('Não salvo');if(doc)schedulePersist()}
 const core=new RMD.Editor(ed,{change:dirty});
 function insertHtml(html){core.insert(html)}
 function addBlock(html){core.blockHtml(html)}
@@ -125,17 +144,35 @@ const actions={
   time:()=>{const unix=Math.floor(Date.now()/1000),value=prompt('Unix timestamp',String(unix)),label=prompt('Texto exibido','Data e hora');if(value&&/^\d+$/.test(value)&&label!==null)insertHtml(`<tg-time unix="${value}" format="wDT">${esc(label)}</tg-time>`)},
   emoji:()=>{const id=prompt('Custom emoji ID','5368324170671202286'),fallback=prompt('Emoji alternativo','👍');if(id&&/^\d+$/.test(id)&&fallback)addBlock(`<p><tg-emoji emoji-id="${id}">${esc(fallback)}</tg-emoji></p>`)},
   button:()=>{const type=(prompt('Tipo: url, web_app, copy_text, switch_inline_query, disabled','url')||'').trim();const label=prompt('Texto do botão','Abrir');if(!label)return;let attrs=`type="${esc(type)}"`;if(type==='url'||type==='web_app'){const u=promptHttp('URL HTTPS');if(!u)return;attrs+=` url="${esc(u)}"`}else if(type==='copy_text'){const t=prompt('Texto para copiar','Texto');if(t===null)return;attrs+=` text="${esc(t)}"`}else if(type==='switch_inline_query'){const q=prompt('Consulta inline','');attrs+=` query="${esc(q||'')}"`}else if(type!=='disabled'){say('Tipo não suportado neste editor');return}addBlock(`<tg-button-row align="center"><tg-button ${attrs}>${esc(label)}</tg-button></tg-button-row>`)},
-  rtl:()=>{rtl=!rtl;ed.dir=rtl?'rtl':'ltr';$('#rtlState').textContent=rtl?'Ligado':'Desligado';dirty()},
-  entities:()=>{skipEntityDetection=!skipEntityDetection;$('#entityState').textContent=skipEntityDetection?'Desligada':'Ligada';dirty()},
-  export:()=>{const h=currentHtml(),blob=new Blob([h],{type:'text/html'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='RMDtxtML-rich-message.html';a.click();URL.revokeObjectURL(url)},
+  rtl:()=>{rtl=!rtl;applyOptions();dirty()},
+  entities:()=>{skipEntityDetection=!skipEntityDetection;applyOptions();dirty()},
+  export:()=>{syncDoc();const blob=new Blob([RMD.exportDocument(doc)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='RMDtxtML.rmdtxtml';a.click();URL.revokeObjectURL(url)},
+  exporthtml:()=>{const h=currentHtml(),blob=new Blob([h],{type:'text/html'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='RMDtxtML-rich-message.html';a.click();URL.revokeObjectURL(url)},
   import:()=>$('#file').click(),
-  reset:()=>{if(confirm('Apagar o rascunho local e iniciar um documento vazio?')){core.setHtml('<p><br></p>');rtl=false;skipEntityDetection=false;ed.dir='ltr';localStorage.removeItem(KEY);dirty()}},
+  revision:async()=>{if(!doc?.revisions?.length)return say('Nenhuma revisão salva');const list=doc.revisions.slice(-10).reverse(),choice=prompt('Revisão para restaurar:\n'+list.map(r=>r.revision+' · '+new Date(r.at).toLocaleString('pt-BR')).join('\n'),String(list[0].revision));if(choice===null)return;const rev=Number(choice);if(!Number.isSafeInteger(rev))return say('Revisão inválida');try{doc=await store.restore(doc,rev,{sanitize:sanitizeRichHtml});rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;core.setHtml(doc.content.html);applyOptions();updateStatus('Revisão restaurada');say('Revisão restaurada')}catch{say('Revisão não encontrada')}},
+  reset:async()=>{if(confirm('Apagar o documento atual e iniciar um documento vazio?')){doc=await store.reset({html:'<p><br></p>',sanitize:sanitizeRichHtml});rtl=false;skipEntityDetection=false;core.setHtml(doc.content.html);applyOptions();updateStatus('Novo documento')}} ,
   server:()=>{const old=apiBase(),u=prompt('URL HTTPS do backend',old);if(u!==null&&/^https:\/\//i.test(u)){localStorage.setItem('rmdtxtml-api-v1',u.replace(/\/+$/,''));say('Servidor salvo')}}
 };
 $('[data-action]').forEach(b=>b.onclick=()=>{drawer.classList.remove('open');if(b.dataset.action==='mark')return wrap('mark');actions[b.dataset.action]?.()});
 
-$('#file').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;const text=await f.text();core.setHtml(sanitizeRichHtml(text)||'<p><br></p>');e.target.value='';dirty()};
-$('#save').onclick=()=>{const m=metrics();localStorage.setItem(KEY,JSON.stringify({html:m.html,rtl,skipEntityDetection}));updateStatus('Salvo');say('Rascunho salvo')};
+$('#file').onchange=async e=>{
+  const f=e.target.files?.[0];if(!f)return;
+  try{
+    const text=await f.text();
+    if(f.name.toLowerCase().endsWith('.rmdtxtml')||f.type==='application/json'){
+      doc=RMD.importDocument(text,{sanitize:sanitizeRichHtml});
+      core.setHtml(doc.content.html);rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;applyOptions();
+      doc=await store.save(doc,{checkpoint:true,sanitize:sanitizeRichHtml});
+      updateStatus('Documento importado');say('Documento RMDtxtML importado')
+    }else{
+      const html=sanitizeRichHtml(text)||'<p><br></p>';
+      core.setHtml(html);syncDoc();doc=await store.save(doc,{checkpoint:true,sanitize:sanitizeRichHtml});
+      updateStatus('HTML importado');say('Rich HTML importado')
+    }
+  }catch(error){say(error?.message==='unsupported_schema'?'Versão de documento não suportada':'Arquivo inválido')}
+  finally{e.target.value=''}
+};
+$('#save').onclick=async()=>{try{await persistDocument({checkpoint:true,label:'Salvo'});say('Checkpoint salvo')}catch{updateStatus('Falha ao salvar');say('Não foi possível salvar')}};
 $('#previewBtn').onclick=()=>{const wrap=$('#previewWrap'),open=!wrap.classList.contains('open');if(open){$('#preview').innerHTML=currentHtml();$('#preview').dir=rtl?'rtl':'ltr'}wrap.classList.toggle('open',open);$('#editWrap').hidden=open;$('#previewBtn').textContent=open?'✕':'◉';updateStatus(open?'Prévia':'Edição')};
 $('#back').onclick=()=>tg?.close?tg.close():history.back();
 ed.onpaste=e=>{const h=e.clipboardData?.getData('text/html');if(h){e.preventDefault();insertHtml(sanitizeRichHtml(h))}};
@@ -158,10 +195,18 @@ $('#send').onclick=async()=>{
   }catch(error){updateStatus('Falha');say(error instanceof Error?error.message:'Falha no envio');tg?.HapticFeedback?.notificationOccurred?.('error')}
 };
 
-try{const saved=JSON.parse(localStorage.getItem(KEY)||'null');if(saved?.html){core.setHtml(sanitizeRichHtml(saved.html)||'<p><br></p>');rtl=saved.rtl===true;skipEntityDetection=saved.skipEntityDetection===true}}catch{}
-ed.dir=rtl?'rtl':'ltr';
-$('#rtlState').textContent=rtl?'Ligado':'Desligado';
-$('#entityState').textContent=skipEntityDetection?'Desligada':'Ligada';
-syncTheme();
-themeQuery.addEventListener?.('change',syncTheme);tg?.onEvent?.('themeChanged',syncTheme);
-updateStatus('Pronto');
+function applyOptions(){
+  ed.dir=rtl?'rtl':'ltr';
+  $('#rtlState').textContent=rtl?'Ligado':'Desligado';
+  $('#entityState').textContent=skipEntityDetection?'Desligada':'Ligada'
+}
+async function initDocument(){
+  const initial=sanitizeRichHtml(ed.innerHTML)||'<p><br></p>';
+  const loaded=await store.load({initialHtml:initial,sanitize:sanitizeRichHtml});
+  doc=loaded.doc;rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;
+  core.setHtml(doc.content.html);applyOptions();
+  updateStatus(loaded.migrated?'Rascunho migrado':'Pronto');
+  return doc
+}
+syncTheme();themeQuery.addEventListener?.('change',syncTheme);tg?.onEvent?.('themeChanged',syncTheme);
+RMD.ready=initDocument();
