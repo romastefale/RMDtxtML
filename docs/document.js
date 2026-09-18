@@ -86,6 +86,18 @@ class Store{
     const doc=normalize({content:{html}},{sanitize});await this.put(doc);this.clearLegacy();return doc
   }
 }
+function adoptTransfer(current,transfer,{sanitize=x=>String(x??'').trim()}={}){
+  const meta=transfer?.document&&typeof transfer.document==='object'?transfer.document:{};
+  const id=typeof meta.id==='string'&&/^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/.test(meta.id)?meta.id:null;
+  const same=!!id&&current?.id===id;
+  const next=normalize(same?current:{id:id||undefined,content:{html:'<p><br></p>'},meta:{revision:0},revisions:[]},{sanitize});
+  next.content.html=sanitize(transfer?.html)||'<p><br></p>';
+  next.options.isRtl=transfer?.isRtl===true;
+  next.options.skipEntityDetection=transfer?.skipEntityDetection===true;
+  const revision=Number(meta.revision);
+  if(!same&&Number.isSafeInteger(revision)&&revision>=0)next.meta.revision=revision;
+  return next
+}
 function exportDocument(doc){
   const data=clone(doc);data.schema=SCHEMA;
   return JSON.stringify(data,null,2)
@@ -97,5 +109,5 @@ function importDocument(text,{sanitize}={}){
   return normalize(raw,{sanitize})
 }
 window.RMD=window.RMD||{};
-Object.assign(window.RMD,{DocumentStore:Store,normalizeDocument:normalize,exportDocument,importDocument,DOCUMENT_SCHEMA:SCHEMA});
+Object.assign(window.RMD,{DocumentStore:Store,normalizeDocument:normalize,adoptTransferDocument:adoptTransfer,exportDocument,importDocument,DOCUMENT_SCHEMA:SCHEMA});
 })();
