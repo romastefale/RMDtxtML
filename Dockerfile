@@ -18,8 +18,8 @@ RUN node --check docs/platform.js \
  && node --check src/store.mjs \
  && node --check src/server.mjs \
  && node --check src/telegram.mjs
-RUN npm run test:unit
-RUN npm run test:e2e
+RUN node --test test/*.test.mjs
+RUN playwright test
 RUN touch /tmp/rmdtxtml-qa-passed
 
 FROM node:24.21.0-alpine
