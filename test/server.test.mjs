@@ -94,7 +94,7 @@ test('confirmed Telegram rejection releases request id for retry',async()=>{
 
 test('web transfer is durable-store backed, opaque, authenticated and one-time',async()=>{
   await withServer(fetch,async base=>{
-    const semantic={schema:2,format:'semantic',modelVersion:1,model:{type:'doc',content:[{type:'heading',attrs:{level:2},content:[{type:'text',text:'Web'}]}]}};
+    const semantic={schema:2,format:'semantic',modelVersion:2,model:{type:'doc',content:[{type:'heading',attrs:{level:2},content:[{type:'text',text:'Web'}]}]}};
     const created=await post(base,'/api/transfers',{html:'<h2>Web</h2>',isRtl:true,skipEntityDetection:true,document:{id:'00000000-0000-4000-8000-000000000001',revision:7},semantic});
     assert.equal(created.status,201);const c=await created.json();
     assert.match(c.token,/^[A-Za-z0-9_-]{32}$/);assert.equal(c.telegramUrl,`https://t.me/rmdtxtml_test_bot?startapp=${c.token}`);
@@ -186,4 +186,20 @@ test('transfer survives a real server restart when SQLite path is durable',async
     if(second){second.server.close();await once(second.server,'close');second.store.close()}
     rmSync(dir,{recursive:true,force:true})
   }
+});
+
+test('POST /api/send forwards validated Rich Message blocks without parallel representation',async()=>{
+  let captured;
+  const telegramFetch=async(url,options)=>{captured=JSON.parse(options.body);return new Response(JSON.stringify({ok:true,result:{message_id:91}}),{status:200,headers:{'content-type':'application/json'}})};
+  await withServer(telegramFetch,async base=>{
+    const richMessage={blocks:[{type:'heading',text:'Título',size:2},{type:'paragraph',text:{type:'bold',text:'Corpo'}}],skip_entity_detection:true};
+    const response=await post(base,'/api/send',{initData:initData(),requestId:'request-blocks-000001',destinationId:'self',richMessage});
+    assert.equal(response.status,200);assert.deepEqual(captured.rich_message,richMessage);assert.equal('html' in captured.rich_message,false)
+  })
+});
+test('POST /api/send rejects multiple Rich Message representations',async()=>{
+  await withServer(fetch,async base=>{
+    const response=await post(base,'/api/send',{initData:initData(),requestId:'request-invalid-rich1',destinationId:'self',richMessage:{html:'<p>x</p>',blocks:[{type:'paragraph',text:'x'}]}});
+    assert.equal(response.status,400);assert.match((await response.json()).error,/exactly_one_rich_representation_required/)
+  })
 });

@@ -114,7 +114,7 @@ class Store{
     next.revisions=[...next.revisions,snapshot(next)].slice(-MAX_REVISIONS);await this.put(next);return next
   }
   async reset({model=EMPTY,normalizeModel}={}){
-    const doc=normalize({schema:SCHEMA,format:'semantic',content:{model}},{normalizeModel});await this.put(doc);this.clearLegacy();return doc
+    const doc=normalize({schema:SCHEMA,format:'semantic',content:{model,modelVersion:MODEL_VERSION}},{normalizeModel});await this.put(doc);this.clearLegacy();return doc
   }
 }
 function adoptTransfer(current,transfer,{normalizeModel,migrateHtml,migrateModel}={}){

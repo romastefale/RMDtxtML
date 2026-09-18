@@ -152,7 +152,7 @@ test('checkpoint persists the canonical document across reload',async({page})=>{
     const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('rmdtxtml',1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
     return await new Promise((resolve,reject)=>{const tx=db.transaction('docs','readonly'),r=tx.objectStore('docs').get('current');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})
   });
-  expect(stored.schema).toBe(2);expect(stored.format).toBe('semantic');expect(stored.content.modelVersion).toBe(1);expect(stored.content.model.type).toBe('doc');expect(stored.content.html).toBeUndefined();
+  expect(stored.schema).toBe(2);expect(stored.format).toBe('semantic');expect(stored.content.modelVersion).toBe(2);expect(stored.content.model.type).toBe('doc');expect(stored.content.html).toBeUndefined();
   await page.reload();await waitReady(page);
   await expect(page.locator('#editor > h3')).toHaveText('Persistente');
   await expect(page.locator('#editor')).toContainText('Depois do reload.')
@@ -274,7 +274,7 @@ test('Telegram MainButton sends raw initData through the application boundary',a
   await page.evaluate(()=>__tg.MainButton.handler());
   await expect.poll(()=>body).not.toBeUndefined();
   expect(body.initData).toBe('signed-raw-data');expect(body.destinationId).toBe('self');expect(body.chatId).toBeUndefined();
-  expect(body.html).toContain('<h2>Enviar</h2>');
+  expect(body.richMessage.blocks[0]).toEqual({type:'heading',text:'Enviar',size:2});
   expect(body.requestId).toMatch(/^(?:[0-9a-f-]{36}|send-)/);
   await expect.poll(()=>page.evaluate(()=>({active:__tg.MainButton.isActive,progress:__tg.MainButton.isProgressVisible,haptic:__tg.HapticFeedback.type})))
     .toEqual({active:true,progress:false,haptic:'success'})
@@ -313,7 +313,47 @@ test('Web handoff sends document identity before navigating to Telegram',async({
   await expect.poll(()=>body).not.toBeUndefined();
   expect(body.html).toContain('<h2>Web</h2>');
   expect(body.document.id).toMatch(/^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/);
-  expect(body.semantic.schema).toBe(2);expect(body.semantic.format).toBe('semantic');expect(body.semantic.modelVersion).toBe(1);
+  expect(body.semantic.schema).toBe(2);expect(body.semantic.format).toBe('semantic');expect(body.semantic.modelVersion).toBe(2);
   expect(body.semantic.model.type).toBe('doc');
   await page.waitForURL(/t\.me\/rmdtxtml_test_bot/)
+});
+
+
+test('official Rich HTML structures survive semantic round-trip without silent loss',async({page})=>{
+  await web(page);
+  const html='<details open><summary><strong>Resumo</strong></summary><p>Corpo <em>rico</em></p></details>'+
+    '<table bordered compact><caption>Tabela</caption><tr><th>H</th><td colspan="2">V</td></tr></table>'+
+    '<figure><tg-map lat="41.9" long="12.5" zoom="14" width="600" height="400"/><figcaption>Roma<cite>Fonte</cite></figcaption></figure>'+
+    '<tg-slideshow><img src="https://example.com/a.jpg"/><video src="https://example.com/b.mp4"/><figcaption>Mídia</figcaption></tg-slideshow>'+
+    '<ol><li value="7" type="i">Item</li></ol>'+
+    '<tg-button-row align="right"><tg-button type="callback_data" style="link" data="go">Abrir</tg-button><tg-button type="disabled">Off</tg-button></tg-button-row>';
+  const result=await page.evaluate(value=>{const model=RMD.editor.parseHtml(value);RMD.editor.setModel(model,{history:false});const serialized=RMD.editor.html();return{model,serialized,reparsed:RMD.editor.parseHtml(serialized),rendered:RMD.editor.render()}},html);
+  expect(result.reparsed).toEqual(result.model);
+  expect(result.rendered.mechanism).toBe('Rich Message · Blocks');
+  const blocks=result.rendered.richMessage.blocks;
+  expect(blocks.find(x=>x.type==='details').blocks[0].type).toBe('paragraph');
+  expect(blocks.find(x=>x.type==='table').caption).toBe('Tabela');
+  expect(blocks.find(x=>x.type==='map').caption.credit).toBe('Fonte');
+  expect(blocks.find(x=>x.type==='slideshow').blocks.map(x=>x.type)).toEqual(['photo','video']);
+  expect(blocks.find(x=>x.type==='list').items[0]).toMatchObject({value:7,type:'i'});
+  expect(blocks.find(x=>x.type==='buttons').buttons).toHaveLength(2)
+});
+test('TXT import stays literal while Markdown import is interpreted and original source is preserved',async({page})=>{
+  await web(page);
+  await page.locator('#file').setInputFiles({name:'literal.txt',mimeType:'text/plain',buffer:Buffer.from('# Não é título\n**não é negrito**','utf8')});
+  await expect(page.locator('#editor > p')).toHaveCount(2);await expect(page.locator('#editor h1,#editor strong')).toHaveCount(0);
+  let source=await page.evaluate(()=>RMD.application.document().source);
+  expect(source.kind).toBe('text');expect(source.originalText).toContain('**não é negrito**');expect(source.edited).toBe(false);
+  await page.locator('#file').setInputFiles({name:'doc.md',mimeType:'text/markdown',buffer:Buffer.from('# Título\n\n**forte**\n\n| A | B |\n| - | - |\n| 1 | 2 |','utf8')});
+  await expect(page.locator('#editor > h1')).toHaveText('Título');await expect(page.locator('#editor strong')).toHaveText('forte');await expect(page.locator('#editor table')).toHaveCount(1);
+  source=await page.evaluate(()=>RMD.application.document().source);
+  expect(source.kind).toBe('markdown');expect(source.originalText).toContain('| A | B |');expect(source.encoding).toBe('utf-8')
+});
+test('preview and send use the same renderer decision and payload',async({page})=>{
+  let body;
+  await page.route('**/api/send',async route=>{body=route.request().postDataJSON();await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,result:{message_id:101}})})});
+  await telegram(page);await setEditor(page,'<h2>Mesmo renderer</h2><p>Corpo</p>');
+  const expected=await page.evaluate(()=>RMD.editor.render({isRtl:false,skipEntityDetection:false}));
+  await page.locator('#previewBtn').click();await expect(page.locator('#previewMechanism')).toHaveText(expected.mechanism);await page.locator('#previewBtn').click();
+  await page.evaluate(()=>__tg.MainButton.handler());await expect.poll(()=>body).not.toBeUndefined();expect(body.richMessage).toEqual(expected.richMessage)
 });

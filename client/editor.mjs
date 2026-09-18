@@ -7,6 +7,7 @@ import {baseKeymap,setBlockType,toggleMark} from 'prosemirror-commands';
 import {wrapInList,liftListItem,splitListItem} from 'prosemirror-schema-list';
 import {gapCursor} from 'prosemirror-gapcursor';
 import {renderRichMessage} from './rich-message.mjs';
+import {markdownToHtml} from './importer.mjs';
 
 const url=v=>/^(#|https?:|mailto:|tel:|tg:\/\/user\?id=)/i.test(String(v||''))?String(v):false;
 const media=v=>/^(https?:\/\/|tg:\/(?:photo|video|document|audio|emoji)\?id=)/i.test(String(v||''))?String(v):false;
@@ -236,7 +237,7 @@ function assertSafeModel(node){
       if(a.type==='callback_data'&&(!String(a.data||'')||new TextEncoder().encode(String(a.data)).length>64))throw new RangeError('invalid_callback_data');
       if(a.type==='copy_text'&&!String(a.text||''))throw new RangeError('invalid_copy_text')
     }
-    if(name==='blockquote'&&a.expandable&&child.content?.some(block=>block.type.name!=='paragraph'))throw new RangeError('invalid_expandable_structure');
+    if(name==='blockquote'&&a.expandable){let invalid=false;child.forEach(block=>{if(block.type.name!=='paragraph')invalid=true});if(invalid)throw new RangeError('invalid_expandable_structure')}
   });
   return node
 }
@@ -358,6 +359,7 @@ class Editor{
   migrateModel(json,fromVersion){return migrateModel(json,fromVersion)}
   render(options={}){return renderRichMessage(this.model(),{...options,html:this.html()})}
   parsePlainText(text){const lines=String(text).split(/\r?\n/);return normalizeModel({type:'doc',content:lines.map(line=>({type:'paragraph',...(line?{content:[{type:'text',text:line}]}:{})}))})}
+  parseMarkdown(text){const result=markdownToHtml(text);return{model:parseHtml(result.html),html:result.html,warnings:result.warnings}}
   stats(){
     const doc=this.view.state.doc;let blocks=0,meaningful=false;
     const atomContent=new Set(['divider','math_inline','math_block','custom_emoji','time','image','video','audio','document','map','collage','slideshow','details','button','button_row']);

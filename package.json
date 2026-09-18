@@ -24,6 +24,7 @@
     "prosemirror-model": "1.25.11",
     "prosemirror-schema-list": "1.5.1",
     "prosemirror-state": "1.4.4",
-    "prosemirror-view": "1.42.3"
+    "prosemirror-view": "1.42.3",
+    "markdown-it": "15.0.2"
   }
 }

@@ -129,7 +129,7 @@ const actions={
   quote:()=>insertSpec({type:'blockquote',attrs:{expandable:false},content:[{type:'paragraph',content:[textSpec('Citação '),textSpec('Autor',[{type:'cite'}])]}]}),
   expandable:()=>insertSpec({type:'blockquote',attrs:{expandable:true},content:[paragraphSpec('Citação expansível'),{type:'paragraph',content:[textSpec('Conteúdo adicional '),textSpec('Autor',[{type:'cite'}])]}]}),
   pullquote:()=>insertSpec({type:'pullquote',content:[textSpec('Trecho em destaque '),textSpec('Autor',[{type:'cite'}])]}),
-  details:()=>{const summary=prompt('Título','Detalhes'),body=prompt('Conteúdo','Conteúdo recolhível.');if(summary!==null&&body!==null)insertSpec({type:'details',attrs:{summary,body,open:false}})},
+  details:()=>{const summary=prompt('Título','Detalhes'),body=prompt('Conteúdo','Conteúdo recolhível.');if(summary!==null&&body!==null)insertSpec({type:'details',attrs:{open:false},content:[{type:'details_summary',...(summary?{content:[textSpec(summary)]}:{})},paragraphSpec(body)]})},
   pre:()=>{const language=safeName(prompt('Linguagem (opcional)','javascript')||''),code=prompt('Código','console.log("Olá")');if(code!==null)insertSpec({type:'code_block',attrs:{language},...(code?{content:[textSpec(code)]}:{})})},
   divider:()=>insertSpec({type:'divider'}),
   math:()=>{const expression=prompt('Fórmula LaTeX','x^2 + y^2');if(expression)insertSpec({type:'math_inline',attrs:{expression}})},
@@ -141,27 +141,33 @@ const actions={
       attrs:{colspan:1,rowspan:1,align:'',valign:''},
       content:[textSpec(row===0?'Cabeçalho '+(col+1):'Célula')]
     }))}));
-    insertSpec({type:'table',attrs:{bordered:true,striped:false,compact:true},content})
+    const caption=prompt('Legenda da tabela (opcional)','');
+    insertSpec({type:'table',attrs:{bordered:true,striped:false,compact:true},content:[...(caption?[{type:'table_caption',content:[textSpec(caption)]}]:[]),...content]})
   },
-  image:()=>{const src=promptHttp('URL HTTPS da imagem');if(src)insertSpec({type:'image',attrs:{src,caption:'Imagem',alt:'Imagem',spoiler:false}})},
-  video:()=>{const src=promptHttp('URL HTTPS do vídeo');if(src)insertSpec({type:'video',attrs:{src,caption:'Vídeo',alt:'',spoiler:false}})},
-  audio:()=>{const src=promptHttp('URL HTTPS do áudio');if(src)insertSpec({type:'audio',attrs:{src,caption:'Áudio',alt:'',spoiler:false}})},
-  document:()=>{const src=promptHttp('URL HTTPS do documento');if(src)insertSpec({type:'document',attrs:{src,caption:'Documento'}})},
-  map:()=>{const lat=Number(prompt('Latitude','-23.5505')),long=Number(prompt('Longitude','-46.6333')),zoom=Math.max(0,Math.min(24,+prompt('Zoom (0–24)','14')||14));if(Number.isFinite(lat)&&Number.isFinite(long))insertSpec({type:'map',attrs:{lat,long,zoom}})},
-  collage:()=>{const a=promptHttp('Primeira imagem'),b=promptHttp('Segunda imagem');if(a&&b)insertSpec({type:'collage',attrs:{items:[{src:a,alt:'Imagem 1'},{src:b,alt:'Imagem 2'}],caption:'Collage'}})},
-  slideshow:()=>{const a=promptHttp('Primeira imagem'),b=promptHttp('Segunda imagem');if(a&&b)insertSpec({type:'slideshow',attrs:{items:[{src:a,alt:'Slide 1'},{src:b,alt:'Slide 2'}],caption:'Slideshow'}})},
+  image:()=>{const src=promptHttp('URL HTTPS da imagem'),caption=src?prompt('Legenda (opcional)','Imagem'):null;if(src)insertSpec({type:'image',attrs:{src,alt:'Imagem',spoiler:false},...(caption?{content:[textSpec(caption)]}:{})})},
+  video:()=>{const src=promptHttp('URL HTTPS do vídeo'),caption=src?prompt('Legenda (opcional)','Vídeo'):null;if(src)insertSpec({type:'video',attrs:{src,alt:'',spoiler:false},...(caption?{content:[textSpec(caption)]}:{})})},
+  audio:()=>{const src=promptHttp('URL HTTPS do áudio'),caption=src?prompt('Legenda (opcional)','Áudio'):null;if(src)insertSpec({type:'audio',attrs:{src,alt:'',spoiler:false},...(caption?{content:[textSpec(caption)]}:{})})},
+  document:()=>{const src=promptHttp('URL HTTPS do documento'),caption=src?prompt('Legenda (opcional)','Documento'):null;if(src)insertSpec({type:'document',attrs:{src},...(caption?{content:[textSpec(caption)]}:{})})},
+  map:()=>{const lat=Number(prompt('Latitude','-23.5505')),long=Number(prompt('Longitude','-46.6333')),zoom=Math.max(0,Math.min(24,+prompt('Zoom (0–24)','14')||14)),caption=prompt('Legenda (opcional)','Localização');if(Number.isFinite(lat)&&Number.isFinite(long))insertSpec({type:'map',attrs:{lat,long,zoom,width:0,height:0},...(caption?{content:[textSpec(caption)]}:{})})},
+  collage:()=>{const a=promptHttp('Primeira imagem'),b=promptHttp('Segunda imagem');if(a&&b)insertSpec({type:'collage',attrs:{items:[{type:'image',src:a,alt:'Imagem 1',spoiler:false},{type:'image',src:b,alt:'Imagem 2',spoiler:false}]},content:[textSpec('Collage')]})},
+  slideshow:()=>{const a=promptHttp('Primeira imagem'),b=promptHttp('Segundo item (imagem ou vídeo)');if(a&&b)insertSpec({type:'slideshow',attrs:{items:[{type:'image',src:a,alt:'Slide 1',spoiler:false},{type:/\.(?:mp4|mov|webm)(?:\?|$)/i.test(b)?'video':'image',src:b,alt:'Slide 2',spoiler:false}]},content:[textSpec('Slideshow')]})},
   reference:()=>{const name=safeName(prompt('Identificador da referência','nota-1')),text=prompt('Texto da referência','Fonte ou nota');if(name&&text!==null)core.insertText(text,[{type:'reference',attrs:{name}}])},
   anchor:()=>{const name=safeName(prompt('Nome da âncora','secao-1'));if(name)insertSpec({type:'anchor',attrs:{name}})},
   time:()=>{const unix=String(prompt('Unix timestamp',String(Math.floor(Date.now()/1000)))||''),label=prompt('Texto exibido','Data e hora');if(/^\d+$/.test(unix)&&label!==null)insertSpec({type:'time',attrs:{unix,format:'wDT',label}})},
   emoji:()=>{const emojiId=prompt('Custom emoji ID','5368324170671202286'),fallback=prompt('Emoji alternativo','👍');if(emojiId&&/^\d+$/.test(emojiId)&&fallback)insertSpec({type:'custom_emoji',attrs:{emojiId,fallback}})},
   button:()=>{
-    const type=(prompt('Tipo: url, web_app, copy_text, switch_inline_query, disabled','url')||'').trim(),label=prompt('Texto do botão','Abrir');if(!label)return;
-    const button={type,label,style:'',url:'',data:'',text:'',query:''};
-    if(type==='url'||type==='web_app'){const value=promptHttp('URL HTTPS');if(!value)return;button.url=value}
-    else if(type==='copy_text'){const value=prompt('Texto para copiar','Texto');if(value===null)return;button.text=value}
-    else if(type==='switch_inline_query'){button.query=prompt('Consulta inline','')||''}
-    else if(type!=='disabled'){say('Tipo não suportado neste editor');return}
-    insertSpec({type:'button_row',attrs:{align:'center',buttons:[button]}})
+    const supported=['url','callback_data','web_app','login_url','switch_inline_query','switch_inline_query_current_chat','switch_inline_query_chosen_chat','copy_text','disabled'];
+    const type=(prompt('Tipo: '+supported.join(', '),'url')||'').trim();if(!supported.includes(type))return say('Tipo de botão não suportado');
+    const label=prompt('Texto do botão','Abrir');if(!label)return;
+    const attrs={type,style:'',url:'',data:'',text:'',query:'',forwardText:'',requestWriteAccess:false,allowUserChats:false,allowBotChats:false,allowGroupChats:false,allowChannelChats:false};
+    const style=(prompt('Estilo opcional: danger, success, primary'+(type==='callback_data'?', link':''),'')||'').trim();if(style)attrs.style=style;
+    if(type==='url'||type==='web_app'||type==='login_url'){const value=promptHttp('URL HTTPS');if(!value)return;attrs.url=value}
+    if(type==='callback_data'){const value=prompt('Callback data (1–64 bytes)','callback');if(!value)return;attrs.data=value}
+    if(type==='login_url'){attrs.forwardText=prompt('Texto ao encaminhar (opcional)','')||'';attrs.requestWriteAccess=confirm('Solicitar permissão de escrita?')}
+    if(type==='switch_inline_query'||type==='switch_inline_query_current_chat'||type==='switch_inline_query_chosen_chat')attrs.query=prompt('Consulta inline','')||'';
+    if(type==='switch_inline_query_chosen_chat'){attrs.allowUserChats=true;attrs.allowBotChats=true;attrs.allowGroupChats=true;attrs.allowChannelChats=true}
+    if(type==='copy_text'){const value=prompt('Texto para copiar','Texto');if(value===null)return;attrs.text=value}
+    insertSpec({type:'button_row',attrs:{align:'center'},content:[{type:'button',attrs,content:[textSpec(label)]}]})
   },
   rtl:()=>{rtl=!rtl;applyOptions();dirty()},
   entities:()=>{skipEntityDetection=!skipEntityDetection;applyOptions();dirty()},
@@ -173,21 +179,45 @@ const actions={
 };
 $$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();actions[b.dataset.action]?.();queueMicrotask(syncEditorUi)});
 
+const MAX_IMPORT_BYTES=2*1024*1024;
+function bytesToBase64(bytes){let binary='';for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));return btoa(binary)}
+async function decodeImport(file){
+  if(file.size>MAX_IMPORT_BYTES)throw new Error('file_too_large');
+  const bytes=new Uint8Array(await file.arrayBuffer()),bom=bytes.length>=3&&bytes[0]===0xef&&bytes[1]===0xbb&&bytes[2]===0xbf;
+  try{return{text:new TextDecoder('utf-8',{fatal:true}).decode(bytes),encoding:'utf-8',bom,bytes}}
+  catch{
+    const selected=prompt('O arquivo não é UTF-8. Informe o encoding (ex.: windows-1252 ou iso-8859-1).','windows-1252');
+    if(!selected)throw new Error('encoding_required');
+    try{return{text:new TextDecoder(selected,{fatal:true}).decode(bytes),encoding:selected.toLowerCase(),bom:false,bytes}}
+    catch{throw new Error('unsupported_encoding')}
+  }
+}
+async function importSource(file,kind){
+  const decoded=await decodeImport(file),parsed=kind==='markdown'?core.parseMarkdown(decoded.text):{model:core.parsePlainText(decoded.text),warnings:[]};
+  doc=await store.reset({model:parsed.model,normalizeModel:m=>core.normalizeModel(m)});
+  doc.source={kind,name:file.name,mime:file.type||'',encoding:decoded.encoding,bom:decoded.bom,originalText:decoded.text,originalBase64:bytesToBase64(decoded.bytes),warnings:parsed.warnings||[],edited:false,importedAt:new Date().toISOString()};
+  core.setModel(doc.content.model,{history:false});rtl=false;skipEntityDetection=false;applyOptions();
+  doc=await store.save(doc,{checkpoint:true,...modelOptions()});
+  updateStatus(kind==='markdown'?'Markdown importado':'Texto literal importado');
+  say(parsed.warnings?.length?'Importado; construções não reconhecidas foram preservadas no original':kind==='markdown'?'Markdown importado':'TXT importado como texto literal')
+}
 $('#file').onchange=async e=>{
   const f=e.target.files?.[0];if(!f)return;
   try{
-    const text=await f.text();
-    if(f.name.toLowerCase().endsWith('.rmdtxtml')||f.type==='application/json'){
-      doc=RMD.importDocument(text,{normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
+    const name=f.name.toLowerCase();
+    if(name.endsWith('.rmdtxtml')){
+      const decoded=await decodeImport(f);
+      doc=RMD.importDocument(decoded.text,modelOptions());
       core.setModel(doc.content.model,{history:false});rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;applyOptions();
       doc=await store.save(doc,{checkpoint:true,...modelOptions()});
       updateStatus('Documento importado');say('Documento RMDtxtML importado')
-    }else{
-      core.setHtml(text,{history:false});syncDoc();doc=await store.save(doc,{checkpoint:true,normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
-      updateStatus('HTML importado');say('Rich HTML importado')
-    }
-  }catch(error){say(error?.message==='unsupported_schema'?'Versão de documento não suportada':'Arquivo inválido')}
-  finally{e.target.value=''}
+    }else if(name.endsWith('.md'))await importSource(f,'markdown');
+    else if(name.endsWith('.txt'))await importSource(f,'text');
+    else throw new Error('unsupported_file_type')
+  }catch(error){
+    const messages={unsupported_schema:'Versão de documento não suportada',unsupported_model_version:'Versão semântica não suportada',file_too_large:'Arquivo maior que 2 MiB',encoding_required:'Escolha de encoding necessária',unsupported_encoding:'Encoding não suportado',unsupported_file_type:'Use .md, .txt ou .rmdtxtml'};
+    say(messages[error?.message]||'Arquivo inválido')
+  }finally{e.target.value=''}
 };
 $('#save').onclick=async()=>{try{await persistDocument({checkpoint:true,label:'Salvo'});say('Checkpoint salvo')}catch{updateStatus('Falha ao salvar');say('Não foi possível salvar')}};
 $('#previewBtn').onclick=()=>{
