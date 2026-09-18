@@ -159,8 +159,20 @@ class Editor{
     const frag=r.extractContents();
     for(const tag of [...INLINE])for(const el of [...frag.querySelectorAll(tag.toLowerCase())].reverse())unwrap(el);
     for(const el of [...frag.children])if(INLINE.has(el.tagName))unwrap(el);
-    const first=frag.firstChild,last=frag.lastChild;if(!first)return false;
-    r.insertNode(frag);const next=document.createRange();next.setStartBefore(first);next.setEndAfter(last);this.select(next);
+    const marker=document.createElement('span');marker.dataset.rmdClear='';marker.append(frag);if(!marker.firstChild)return false;
+    r.insertNode(marker);
+    while(marker.parentElement!==this.root&&INLINE.has(marker.parentElement?.tagName)){
+      const wrap=marker.parentElement,parent=wrap.parentNode,left=wrap.cloneNode(false),right=wrap.cloneNode(false);
+      while(wrap.firstChild&&wrap.firstChild!==marker)left.append(wrap.firstChild);
+      while(marker.nextSibling)right.append(marker.nextSibling);
+      if(left.childNodes.length)parent.insertBefore(left,wrap);
+      parent.insertBefore(marker,wrap);
+      if(right.childNodes.length)parent.insertBefore(right,wrap);
+      wrap.remove()
+    }
+    const parent=marker.parentNode,first=marker.firstChild,last=marker.lastChild;
+    while(marker.firstChild)parent.insertBefore(marker.firstChild,marker);marker.remove();
+    const next=document.createRange();next.setStartBefore(first);next.setEndAfter(last);this.select(next);
     this.normalize();this.record();this.change();this.root.focus({preventScroll:true});return true
   }
   undo(){
