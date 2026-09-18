@@ -48,3 +48,7 @@ Destinos adicionais podem ser declarados por `AUTHORIZED_DESTINATIONS` como JSON
 ## Gate de release
 
 O estágio de QA executa `node --check`, todos os testes Node e Playwright/Chromium. A imagem de runtime só pode ser construída depois que esse estágio cria o marcador `/tmp/rmdtxtml-qa-passed`. Railway usa `/api/health` como healthcheck.
+
+## Release
+
+Versão de produção: `1.0.0`.
