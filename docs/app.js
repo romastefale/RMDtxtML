@@ -246,6 +246,37 @@ async function init(){
   catch(error){platform.setMain({text:'Enviar',visible:true,enabled:false,onClick:sendMessage});updateStatus('Destino indisponível');say(error instanceof Error?error.message:'Falha ao carregar destinos')}
   return doc
 }
+const application={
+  ready:()=>RMD.ready,
+  metrics,
+  maxText:MAX_TEXT,
+  document:()=>doc,
+  options:()=>({isRtl:rtl,skipEntityDetection}),
+  syncDocument:()=>syncDoc(),
+  persist:options=>persistDocument(options),
+  setStatus:message=>{status.textContent=String(message||'')},
+  notify:say,
+  updateStatus,
+  sendMessage,
+  transferPayload(){
+    syncDoc();
+    return{
+      html:currentHtml(),
+      isRtl:rtl,
+      skipEntityDetection,
+      document:{id:doc?.id||'',revision:doc?.meta?.revision||0},
+      semantic:{schema:RMD.DOCUMENT_SCHEMA,format:'semantic',modelVersion:RMD.DOCUMENT_MODEL_VERSION,model:core.model()}
+    }
+  },
+  async adoptTransfer(transfer){
+    doc=RMD.adoptTransferDocument(doc,transfer,{normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
+    rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;
+    core.setModel(doc.content.model,{history:false});applyOptions();
+    doc=await store.save(doc,{checkpoint:true,normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
+    return doc
+  }
+};
+RMD.application=application;
 syncTheme();themeQuery.addEventListener?.('change',syncTheme);platform.on('theme',syncTheme);
 RMD.ready=init();
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')persistDocument({label:'Salvo automaticamente'}).catch(()=>{})});
