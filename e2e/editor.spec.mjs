@@ -130,10 +130,29 @@ test('drawer and preview do not mutate the document and restore focus',async({pa
   expect(await page.locator('#editor').evaluate(el=>el.innerHTML)).toBe(before)
 });
 
+test('task checkbox is semantic state and survives persistence',async({page})=>{
+  await web(page);await setEditor(page,'<p>Tarefas</p>');
+  await page.locator('#more').click();await page.locator('[data-action="task"]').click();
+  const boxes=page.locator('#editor input[type="checkbox"]');await expect(boxes).toHaveCount(2);
+  await boxes.first().click();
+  const checked=await page.evaluate(()=>{
+    const model=RMD.editor.model(),items=[];
+    const walk=n=>{if(n.type==='list_item')items.push(n.attrs?.checked);for(const child of n.content||[])walk(child)};walk(model);return items
+  });
+  expect(checked).toEqual([true,true]);
+  await page.locator('#save').click();await page.reload();await waitReady(page);
+  await expect(page.locator('#editor input[type="checkbox"]:checked')).toHaveCount(2)
+});
+
 test('checkpoint persists the canonical document across reload',async({page})=>{
   await web(page);await setEditor(page,'<h3>Persistente</h3><p>Depois do reload.</p>');
   await page.locator('#save').click();
   await expect(page.locator('#status')).toContainText('Salvo');
+  const stored=await page.evaluate(async()=>{
+    const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('rmdtxtml',1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
+    return await new Promise((resolve,reject)=>{const tx=db.transaction('docs','readonly'),r=tx.objectStore('docs').get('current');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})
+  });
+  expect(stored.schema).toBe(2);expect(stored.format).toBe('semantic');expect(stored.content.model.type).toBe('doc');expect(stored.content.html).toBeUndefined();
   await page.reload();await waitReady(page);
   await expect(page.locator('#editor > h3')).toHaveText('Persistente');
   await expect(page.locator('#editor')).toContainText('Depois do reload.')
