@@ -141,6 +141,9 @@ test('task checkbox is semantic state and survives persistence',async({page})=>{
   const boxes=page.locator('#editor input[type="checkbox"]');await expect(boxes).toHaveCount(2);
   await boxes.first().click();
   expect(await readChecked()).toEqual([true,true]);
+  const rich=await page.evaluate(()=>RMD.editor.html());
+  expect(rich).toContain('<input type="checkbox" checked="">');
+  expect(rich).not.toContain('rmd-task-');expect(rich).not.toContain('data-task');
   await page.locator('#save').click();await page.reload();await waitReady(page);
   await expect(page.locator('#editor input[type="checkbox"]:checked')).toHaveCount(2)
 });
