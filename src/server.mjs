@@ -103,7 +103,7 @@ async function send(req,res,{token,env,fetchImpl,headers,data}){
 
   const previous=data.sendState(userId,requestId);
   if(previous?.state==='done')return json(res,200,{ok:true,result:previous.response,idempotent:true},headers);
-  if(previous?.state==='pending')return json(res,409,{ok:false,error:'Este envio já foi iniciado; o resultado anterior ainda é indeterminado',requestId},headers);
+  if(previous?.state==='pending'||previous?.state==='uncertain')return json(res,409,{ok:false,error:'Este envio já foi iniciado; o resultado anterior ainda é indeterminado',requestId,uncertain:true},headers);
   if(!data.beginSend(userId,requestId)){
     const current=data.sendState(userId,requestId);
     if(current?.state==='done')return json(res,200,{ok:true,result:current.response,idempotent:true},headers);
@@ -118,7 +118,7 @@ async function send(req,res,{token,env,fetchImpl,headers,data}){
     data.completeSend(userId,requestId,result.result);
     return json(res,200,{ok:true,result:result.result,requestId},headers)
   }catch(error){
-    if(error?.telegramResponse===true)data.releaseSend(userId,requestId);
+    if(error?.telegramResponse===true)data.releaseSend(userId,requestId);else data.markUncertain(userId,requestId);
     const message=error?.telegramResponse===true
       ?(error instanceof Error?error.message:'Telegram recusou o envio')
       :'Falha de rede após iniciar o envio; o resultado é indeterminado e o mesmo requestId não será reenviado automaticamente';
