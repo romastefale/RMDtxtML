@@ -27,7 +27,24 @@ test('health endpoint reports storage mode and bot configuration',async()=>{
   await withServer(fetch,async base=>{
     const response=await fetch(base+'/api/health'),body=await response.json();
     assert.equal(response.status,200);assert.equal(body.ok,true);assert.equal(body.botConfigured,true);
-    assert.equal(body.storage.driver,'sqlite');assert.equal(body.storage.persistent,false)
+    assert.equal(body.version,'1.0.0');assert.equal(body.storage.driver,'sqlite');assert.equal(body.storage.persistent,false)
+  })
+});
+
+test('POST /api/bootstrap exposes only opaque authorized destinations',async()=>{
+  await withServer(fetch,async base=>{
+    const response=await post(base,'/api/bootstrap',{initData:initData()}),body=await response.json();
+    assert.equal(response.status,200);assert.deepEqual(body.destinations,[{id:'self',label:'Minhas mensagens'}]);
+    assert.equal(JSON.stringify(body).includes('"42"'),false)
+  })
+});
+
+test('static shell emits release security headers and HEAD has no response body',async()=>{
+  await withServer(fetch,async base=>{
+    const response=await fetch(base+'/',{method:'HEAD'});
+    assert.equal(response.status,200);assert.equal(response.headers.get('referrer-policy'),'no-referrer');
+    assert.match(response.headers.get('permissions-policy')||'',/camera=\(\)/);
+    assert.equal(await response.text(),'')
   })
 });
 
@@ -35,7 +52,7 @@ test('POST /api/send validates session, forwards Bot API payload and is idempote
   let calls=0,captured;
   const telegramFetch=async(url,options)=>{calls++;captured={url,body:JSON.parse(options.body)};return new Response(JSON.stringify({ok:true,result:{message_id:7}}),{status:200,headers:{'content-type':'application/json'}})};
   await withServer(telegramFetch,async base=>{
-    const body={initData:initData(),requestId,chatId:'42',html:'<h2>Olá</h2>',isRtl:true,skipEntityDetection:true};
+    const body={initData:initData(),requestId,destinationId:'self',html:'<h2>Olá</h2>',isRtl:true,skipEntityDetection:true};
     const first=await post(base,'/api/send',body),a=await first.json();
     assert.equal(first.status,200);assert.equal(a.ok,true);assert.match(captured.url,/\/sendRichMessage$/);
     assert.equal(captured.body.chat_id,'42');assert.deepEqual(captured.body.rich_message,{html:'<h2>Olá</h2>',is_rtl:true,skip_entity_detection:true});
@@ -47,7 +64,7 @@ test('POST /api/send validates session, forwards Bot API payload and is idempote
 test('POST /api/send rejects a destination outside self scope',async()=>{
   let called=false;
   await withServer(async()=>{called=true;return new Response('{}',{status:500})},async base=>{
-    const response=await post(base,'/api/send',{initData:initData(),requestId,chatId:'43',html:'<p>x</p>'},null);
+    const response=await post(base,'/api/send',{initData:initData(),requestId,destinationId:'d_invalid',html:'<p>x</p>'},null);
     assert.equal(response.status,403);assert.equal(called,false)
   })
 });
@@ -55,7 +72,7 @@ test('POST /api/send rejects a destination outside self scope',async()=>{
 test('network uncertainty blocks an automatic duplicate send',async()=>{
   let calls=0;
   await withServer(async()=>{calls++;throw new Error('network down')},async base=>{
-    const body={initData:initData(),requestId,chatId:'42',html:'<p>x</p>'};
+    const body={initData:initData(),requestId,destinationId:'self',html:'<p>x</p>'};
     const first=await post(base,'/api/send',body),a=await first.json();
     assert.equal(first.status,502);assert.equal(a.uncertain,true);
     const second=await post(base,'/api/send',body),b=await second.json();
@@ -67,7 +84,7 @@ test('confirmed Telegram rejection releases request id for retry',async()=>{
   let calls=0;
   const telegramFetch=async()=>{calls++;return new Response(JSON.stringify({ok:false,description:'Bad Request'}),{status:400,headers:{'content-type':'application/json'}})};
   await withServer(telegramFetch,async base=>{
-    const body={initData:initData(),requestId,chatId:'42',html:'<p>x</p>'};
+    const body={initData:initData(),requestId,destinationId:'self',html:'<p>x</p>'};
     const first=await post(base,'/api/send',body),a=await first.json();
     assert.equal(first.status,502);assert.equal(a.uncertain,false);
     const second=await post(base,'/api/send',body);
@@ -94,7 +111,7 @@ test('browser API writes reject untrusted Origin',async()=>{
   await withServer(fetch,async base=>{
     const transfer=await post(base,'/api/transfers',{html:'<p>x</p>'},'https://evil.example');
     assert.equal(transfer.status,403);
-    const send=await post(base,'/api/send',{initData:initData(),requestId,chatId:'42',html:'<p>x</p>'},'https://evil.example');
+    const send=await post(base,'/api/send',{initData:initData(),requestId,destinationId:'self',html:'<p>x</p>'},'https://evil.example');
     assert.equal(send.status,403)
   })
 });

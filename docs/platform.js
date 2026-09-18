@@ -3,12 +3,7 @@ const tg=window.Telegram?.WebApp||null;
 const root=document.documentElement;
 const hasInit=()=>typeof tg?.initData==='string'&&tg.initData.length>0;
 const isTelegram=()=>hasInit();
-const api=()=>{
-  const custom=localStorage.getItem('rmdtxtml-api-v1');
-  if(custom)return custom.replace(/\/+$/,'');
-  if(/^https?:$/.test(location.protocol)&&location.hostname!=='romastefale.github.io')return location.origin;
-  return 'https://rmdtxtml.up.railway.app'
-};
+const api=()=>/^https?:$/.test(location.protocol)?location.origin:'https://rmdtxtml.up.railway.app';
 const startParam=()=>{
   const unsafe=tg?.initDataUnsafe?.start_param;
   if(typeof unsafe==='string'&&unsafe)return unsafe;

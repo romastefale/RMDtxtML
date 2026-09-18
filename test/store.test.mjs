@@ -77,3 +77,15 @@ test('confirmed failure can release a send id',()=>{
     assert.equal(store.beginSend('42','request-send-0002'),true)
   }finally{store.close()}
 });
+
+
+test('stale pending send becomes uncertain and old send records are pruned',()=>{
+  const store=new Store({env:{},dbPath:':memory:'});
+  try{
+    store.beginSend('42','request-send-stale',{now:1000});
+    store.prune(1000+5*60_000+1);
+    assert.equal(store.sendState('42','request-send-stale').state,'uncertain');
+    store.prune(1000+8*86400_000);
+    assert.equal(store.sendState('42','request-send-stale'),null)
+  }finally{store.close()}
+});

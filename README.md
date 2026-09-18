@@ -1,21 +1,31 @@
 # RMDtxtML
 
-Editor Web + Telegram Mini App para Telegram Rich Messages.
+RMDtxtML 1.0.0 é um editor Web + Telegram Mini App para criar, visualizar, transferir e publicar Rich Messages da Telegram Bot API 10.3.
 
-## Runtime
+## Arquitetura
 
-- Node.js 22
-- Rich HTML canônico
-- SQLite para estado de backend
-- Railway como runtime atual
+O documento canônico vive no frontend e passa por editor, sanitização, preview e persistência local. A transferência Web → Telegram usa token opaco de curta duração. Operações autenticadas validam `Telegram.WebApp.initData` no servidor. O cliente recebe somente `destinationId` e rótulo; o backend resolve o `chat_id` autorizado internamente antes de chamar `sendRichMessage`.
 
-## Persistência no Railway
+O runtime de produção usa Node.js 24.21, SQLite e Railway. O Docker mantém Chromium/Playwright apenas no estágio de QA; a imagem final é Node Alpine.
 
-O backend usa `RAILWAY_VOLUME_MOUNT_PATH` automaticamente quando um Railway Volume está anexado. Para produção, anexe um volume ao serviço e monte em `/data`.
+## Segurança
 
-Sem volume, o serviço continua funcional, mas transferências, rate limits e chaves de idempotência não sobrevivem a uma substituição do container. `GET /api/health` informa `storage.persistent`.
+- backend de produção fixo no mesmo origin; não existe override via localStorage;
+- validação HMAC e expiração de `initData` no servidor;
+- destinos de publicação opacos e resolvidos server-side;
+- CORS/origin checks, limites de corpo e rate limiting;
+- tokens de transferência expiram e são consumidos atomicamente;
+- cada envio usa `requestId`; sucesso é idempotente e falha de transporte indeterminada não é repetida cegamente;
+- chamadas à Bot API têm timeout;
+- Rich HTML é validado antes de transferência e publicação.
 
-## Variáveis
+## Persistência
+
+O backend usa automaticamente `RAILWAY_VOLUME_MOUNT_PATH` quando um Railway Volume está anexado. Em produção durável, monte um volume em `/data`.
+
+Sem volume o serviço continua funcional, mas SQLite fica no filesystem efêmero do container; `GET /api/health` expõe `storage.persistent` para tornar isso observável.
+
+## Configuração
 
 Obrigatórias no ambiente atual:
 
@@ -26,18 +36,15 @@ Obrigatórias no ambiente atual:
 - `SEND_SCOPE`
 - `TRANSFER_TTL_SECONDS`
 
-Controles operacionais:
+Operação:
 
-- `TRANSFER_RATE_LIMIT` — criações de transferência por IP/minuto
-- `CLAIM_RATE_LIMIT` — tentativas de claim por IP/minuto
-- `SEND_RATE_LIMIT` — envios por usuário Telegram/minuto
+- `TRANSFER_RATE_LIMIT`
+- `CLAIM_RATE_LIMIT`
+- `SEND_RATE_LIMIT`
+- `APP_VERSION`
 
-## Segurança e entrega
+Destinos adicionais podem ser declarados por `AUTHORIZED_DESTINATIONS` como JSON de objetos `{"label":"...","chat_id":"..."}`; `ALLOWED_CHAT_IDS` permanece aceito para uma lista simples server-side.
 
-O servidor valida `Telegram.WebApp.initData` antes de operações autenticadas. Transferências são tokens opacos, expiram e são consumidas atomicamente uma única vez.
+## Gate de release
 
-Cada envio usa um `requestId`. Resultado confirmado é armazenado e reaproveitado em retries. Rejeições explícitas da Bot API liberam o identificador para nova tentativa. Falhas de transporte com resultado desconhecido ficam em estado `uncertain` e não são reenviadas automaticamente, evitando duplicação acidental.
-
-## Gate
-
-O build verifica sintaxe dos módulos Web/backend e executa `npm test` antes do deploy. O Railway usa `/api/health` como healthcheck.
+O estágio de QA executa `node --check`, todos os testes Node e Playwright/Chromium. A imagem de runtime só pode ser construída depois que esse estágio cria o marcador `/tmp/rmdtxtml-qa-passed`. Railway usa `/api/health` como healthcheck.

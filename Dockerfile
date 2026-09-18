@@ -18,7 +18,7 @@ RUN node --check docs/platform.js \
  && npm test \
  && touch /tmp/rmdtxtml-qa-passed
 
-FROM node:22-alpine
+FROM node:24.21.0-alpine
 WORKDIR /app
 COPY --from=test /tmp/rmdtxtml-qa-passed /tmp/rmdtxtml-qa-passed
 COPY package.json ./

@@ -12,7 +12,7 @@ const themeQuery=matchMedia('(prefers-color-scheme: dark)');
 let rtl=false;
 let skipEntityDetection=false;
 const store=new RMD.DocumentStore();
-let doc=null,saveTimer=0,sendRequestId='';
+let doc=null,saveTimer=0,sendRequestId='',destinationId='';
 
 const ALIASES={B:'STRONG',I:'EM',INS:'U',STRIKE:'S',DEL:'S'};
 const TAGS=new Set('A B STRONG I EM U INS S STRIKE DEL CODE PRE MARK SUB SUP TG-SPOILER TG-REFERENCE TG-EMOJI TG-TIME TG-MATH H1 H2 H3 H4 H5 H6 P FOOTER HR UL OL LI INPUT BR BLOCKQUOTE CITE ASIDE IMG VIDEO AUDIO TG-DOCUMENT FIGURE FIGCAPTION TG-MAP TG-COLLAGE TG-SLIDESHOW TABLE CAPTION THEAD TBODY TR TH TD DETAILS SUMMARY TG-MATH-BLOCK TG-BUTTON TG-BUTTON-ROW'.split(' '));
@@ -103,7 +103,7 @@ const menuIcons={
   ul:'list',ol:'list',task:'list',quote:'quote',expandable:'quote',pullquote:'quote',details:'file',pre:'code',divider:'text',table:'table',
   math:'text',mathblock:'text',image:'media',video:'media',audio:'media',document:'file',map:'media',collage:'media',slideshow:'media',
   reference:'file',anchor:'link',time:'text',emoji:'media',button:'button',rtl:'settings',entities:'settings',
-  export:'file',exporthtml:'code',import:'file',revision:'file',server:'settings',reset:'settings'
+  export:'file',exporthtml:'code',import:'file',revision:'file',reset:'settings'
 };
 for(const b of $$('[data-action]')){
   const id=menuIcons[b.dataset.action];if(id&&!b.querySelector('svg'))b.insertAdjacentHTML('afterbegin',`<svg class="menuIcon" aria-hidden="true"><use href="#i-${id}"/></svg>`)
@@ -209,8 +209,7 @@ const actions={
   exporthtml:()=>{const h=currentHtml(),blob=new Blob([h],{type:'text/html'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='RMDtxtML-rich-message.html';a.click();URL.revokeObjectURL(url)},
   import:()=>$('#file').click(),
   revision:async()=>{if(!doc?.revisions?.length)return say('Nenhuma revisão salva');const list=doc.revisions.slice(-10).reverse(),choice=prompt('Revisão para restaurar:\n'+list.map(r=>r.revision+' · '+new Date(r.at).toLocaleString('pt-BR')).join('\n'),String(list[0].revision));if(choice===null)return;const rev=Number(choice);if(!Number.isSafeInteger(rev))return say('Revisão inválida');try{doc=await store.restore(doc,rev,{sanitize:sanitizeRichHtml});rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;core.setHtml(doc.content.html);applyOptions();updateStatus('Revisão restaurada');say('Revisão restaurada')}catch{say('Revisão não encontrada')}},
-  reset:async()=>{if(confirm('Apagar o documento atual e iniciar um documento vazio?')){doc=await store.reset({html:'<p><br></p>',sanitize:sanitizeRichHtml});rtl=false;skipEntityDetection=false;core.setHtml(doc.content.html);applyOptions();updateStatus('Novo documento')}} ,
-  server:()=>{const old=platform.api(),u=prompt('URL HTTPS do backend',old);if(u!==null&&/^https:\/\//i.test(u)){localStorage.setItem('rmdtxtml-api-v1',u.replace(/\/+$/,''));say('Servidor salvo')}}
+  reset:async()=>{if(confirm('Apagar o documento atual e iniciar um documento vazio?')){doc=await store.reset({html:'<p><br></p>',sanitize:sanitizeRichHtml});rtl=false;skipEntityDetection=false;core.setHtml(doc.content.html);applyOptions();updateStatus('Novo documento')}}
 };
 $$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();actions[b.dataset.action]?.();queueMicrotask(syncEditorUi)});
 
@@ -242,22 +241,21 @@ $('#back').onclick=()=>platform.close();
 ed.onpaste=e=>{const h=e.clipboardData?.getData('text/html');if(h){e.preventDefault();insertHtml(sanitizeRichHtml(h))}};
 
 async function sendMessage(){
+  await RMD.ready;
   const m=metrics();
   if(!m.html)return say('Escreva algum conteúdo');
   if(m.text>MAX_TEXT)return say('A mensagem excede 32.768 caracteres');
   if(!platform.isTelegram())return say('Abra o RMDtxtML pelo Telegram para enviar');
-  const defaultTarget=platform.userId();
-  const chatId=prompt('Destino (ID do chat)',defaultTarget);
-  if(!chatId)return;
+  if(!destinationId)return say('Nenhum destino autorizado disponível');
   if(!sendRequestId)sendRequestId=crypto.randomUUID?.()||('send-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
   status.textContent='Enviando…';platform.setMain({text:'Enviando…',visible:true,enabled:false,busy:true,onClick:sendMessage});
   try{
-    await platform.json('/api/send',{method:'POST',auth:true,body:{requestId:sendRequestId,chatId,html:m.html,isRtl:rtl,skipEntityDetection}});
+    await platform.json('/api/send',{method:'POST',auth:true,body:{requestId:sendRequestId,destinationId,html:m.html,isRtl:rtl,skipEntityDetection}});
     sendRequestId='';platform.setMain({text:'Enviar',visible:true,enabled:true,busy:false,onClick:sendMessage});updateStatus('Enviado');say('Rich Message enviada');platform.haptic('success');
   }catch(error){platform.setMain({text:'Enviar',visible:true,enabled:true,busy:false,onClick:sendMessage});updateStatus(error?.info?.uncertain?'Resultado indeterminado':'Falha');say(error instanceof Error?error.message:'Falha no envio');platform.haptic('error')}
 }
 $('#send').onclick=sendMessage;
-if(platform.isTelegram())platform.setMain({text:'Enviar',visible:true,enabled:true,onClick:sendMessage});
+if(platform.isTelegram())platform.setMain({text:'Enviar',visible:true,enabled:false,onClick:sendMessage});
 
 function applyOptions(){
   ed.dir=rtl?'rtl':'ltr';
@@ -274,8 +272,28 @@ async function initDocument(){
   updateStatus(loaded.migrated?'Rascunho migrado':'Pronto');
   return doc
 }
+async function initDestinations(){
+  if(!platform.isTelegram())return[];
+  const result=await platform.json('/api/bootstrap',{method:'POST',auth:true,body:{}});
+  const select=$('#destination'),items=Array.isArray(result.destinations)?result.destinations:[];
+  select.replaceChildren(...items.map(item=>{const option=document.createElement('option');option.value=String(item.id);option.textContent=String(item.label);return option}));
+  const saved=sessionStorage.getItem('rmdtxtml-destination');
+  destinationId=items.some(x=>x.id===saved)?saved:String(items[0]?.id||'');
+  select.value=destinationId;
+  $('#destinationHint').textContent=items.length>1?'Escolha entre os destinos autorizados pelo servidor.':items.length===1?'Destino validado pelo servidor.':'Nenhum destino autorizado.';
+  select.disabled=items.length<2;
+  select.onchange=()=>{destinationId=select.value;sessionStorage.setItem('rmdtxtml-destination',destinationId)};
+  platform.setMain({text:'Enviar',visible:true,enabled:Boolean(destinationId),onClick:sendMessage});
+  return items
+}
+async function init(){
+  await initDocument();
+  try{await initDestinations()}
+  catch(error){platform.setMain({text:'Enviar',visible:true,enabled:false,onClick:sendMessage});updateStatus('Destino indisponível');say(error instanceof Error?error.message:'Falha ao carregar destinos')}
+  return doc
+}
 syncTheme();themeQuery.addEventListener?.('change',syncTheme);platform.on('theme',syncTheme);
-RMD.ready=initDocument();
+RMD.ready=init();
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')persistDocument({label:'Salvo automaticamente'}).catch(()=>{})});
 window.addEventListener('pagehide',()=>{persistDocument({label:'Salvo automaticamente'}).catch(()=>{})});
 platform.on('active',active=>{if(!active)persistDocument({label:'Salvo automaticamente'}).catch(()=>{})});

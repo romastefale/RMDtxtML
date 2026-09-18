@@ -37,6 +37,7 @@ function telegramScript(startParam=''){
   })();`
 }
 async function telegram(page,{path='/',startParam=''}={}){
+  await page.route('**/api/bootstrap',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,destinations:[{id:'self',label:'Minhas mensagens'}]})}));
   await page.route(telegramPattern,route=>route.fulfill({status:200,contentType:'application/javascript',body:telegramScript(startParam)}));
   await page.goto(path);
   await waitReady(page)
@@ -218,10 +219,9 @@ test('Telegram MainButton sends raw initData through the application boundary',a
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,result:{message_id:77}})})
   });
   await telegram(page);await setEditor(page,'<h2>Enviar</h2><p>Mensagem</p>');
-  page.once('dialog',dialog=>dialog.accept('42'));
   await page.evaluate(()=>__tg.MainButton.handler());
   await expect.poll(()=>body).not.toBeUndefined();
-  expect(body.initData).toBe('signed-raw-data');expect(body.chatId).toBe('42');
+  expect(body.initData).toBe('signed-raw-data');expect(body.destinationId).toBe('self');expect(body.chatId).toBeUndefined();
   expect(body.html).toContain('<h2>Enviar</h2>');
   expect(body.requestId).toMatch(/^(?:[0-9a-f-]{36}|send-)/);
   await expect.poll(()=>page.evaluate(()=>({active:__tg.MainButton.isActive,progress:__tg.MainButton.isProgressVisible,haptic:__tg.HapticFeedback.type})))

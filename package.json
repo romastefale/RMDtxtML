@@ -1,9 +1,9 @@
 {
   "name": "rmdtxtml",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Telegram Mini App rich-message editor for Bot API 10.3",
+  "description": "Production Telegram Mini App + Web editor for Bot API 10.3 Rich Messages",
   "engines": {
     "node": ">=22"
   },

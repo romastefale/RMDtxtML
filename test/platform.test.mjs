@@ -40,9 +40,9 @@ async function make({telegram:client=null,href='https://example.com/',stored=nul
 }
 
 test('platform distinguishes normal web from Telegram Mini App',async()=>{
-  const web=await make({href:'https://romastefale.github.io/RMDtxtML/'});
+  const web=await make({href:'https://example.com/app'});
   assert.equal(web.platform.isTelegram(),false);
-  assert.equal(web.platform.api(),'https://rmdtxtml.up.railway.app');
+  assert.equal(web.platform.api(),'https://example.com');
   const tg=telegram({initDataUnsafe:{user:{id:42},start_param:'token'}});
   const mini=await make({telegram:tg});
   assert.equal(mini.platform.isTelegram(),true);assert.equal(mini.platform.startParam(),'token');assert.equal(mini.platform.userId(),'42')
@@ -100,7 +100,7 @@ test('authenticated requests forward raw initData, not initDataUnsafe',async()=>
   assert.deepEqual(JSON.parse(captured.options.body),{x:1,initData:'signed-raw-data'})
 });
 
-test('custom backend override is centralized',async()=>{
-  const env=await make({stored:'https://api.example.test///'});
-  assert.equal(env.platform.api(),'https://api.example.test')
+test('backend origin cannot be redirected through local storage',async()=>{
+  const env=await make({href:'https://example.com/app',stored:'https://evil.example'});
+  assert.equal(env.platform.api(),'https://example.com')
 });

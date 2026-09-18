@@ -233,3 +233,12 @@ tg-button-row[align="right"]{justify-content:flex-end}
 
 :root[data-host="telegram"] .top{display:none}
 :root[data-active="false"] .app{visibility:hidden}
+
+.telegramOnly{display:none}
+:root[data-host="telegram"] .telegramOnly{display:block}
+.destinationField{display:grid;gap:6px}
+.destinationField>span{font-size:12px;font-weight:650}
+.destinationField select{
+  width:100%;min-height:44px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg);padding:0 11px
+}
+.destinationField small{color:var(--muted);font-size:11px}

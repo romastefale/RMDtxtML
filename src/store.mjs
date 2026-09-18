@@ -62,7 +62,8 @@ export class Store{
       doneSend:this.db.prepare("UPDATE sends SET state='done',response_json=?,updated_at=? WHERE user_id=? AND request_id=?"),
       failSend:this.db.prepare('DELETE FROM sends WHERE user_id=? AND request_id=?'),
       uncertainSend:this.db.prepare("UPDATE sends SET state='uncertain',updated_at=? WHERE user_id=? AND request_id=?"),
-      pruneSends:this.db.prepare("DELETE FROM sends WHERE created_at<? AND state='done'")
+      stalePending:this.db.prepare("UPDATE sends SET state='uncertain',updated_at=? WHERE state='pending' AND updated_at<?"),
+      pruneSends:this.db.prepare('DELETE FROM sends WHERE created_at<?')
     }
   }
   health(){return{driver:'sqlite',persistent:this.persistent}}
@@ -70,6 +71,7 @@ export class Store{
   prune(now=Date.now()){
     this.q.pruneTransfers.run(now,now-3600_000);
     this.q.pruneRates.run(now);
+    this.q.stalePending.run(now,now-5*60_000);
     this.q.pruneSends.run(now-7*86400_000)
   }
   rate(bucket,{limit=20,windowMs=60_000,now=Date.now()}={}){

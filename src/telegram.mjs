@@ -2,7 +2,28 @@ import crypto from 'node:crypto';
 
 export function signInitData(fields,botToken){const params=new URLSearchParams();for(const[key,value]of Object.entries(fields))params.set(key,String(value));const dataCheck=[...params.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${k}=${v}`).join('\n');const secret=crypto.createHmac('sha256','WebAppData').update(botToken).digest();const hash=crypto.createHmac('sha256',secret).update(dataCheck).digest('hex');params.set('hash',hash);return params.toString()}
 export function validateInitData(initData,botToken,{maxAgeSeconds=86400,now=Date.now()}={}){if(!initData||!botToken)return{ok:false,error:'missing_init_data'};const params=new URLSearchParams(initData);const receivedHash=params.get('hash');if(!receivedHash||!/^[a-f0-9]{64}$/i.test(receivedHash))return{ok:false,error:'invalid_hash'};const authDate=Number(params.get('auth_date')||0),nowSeconds=Math.floor(now/1000);if(!Number.isSafeInteger(authDate)||authDate<=0||authDate>nowSeconds+30)return{ok:false,error:'invalid_auth_date'};if(nowSeconds-authDate>maxAgeSeconds)return{ok:false,error:'expired'};params.delete('hash');const dataCheck=[...params.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${k}=${v}`).join('\n');const secret=crypto.createHmac('sha256','WebAppData').update(botToken).digest();const expected=crypto.createHmac('sha256',secret).update(dataCheck).digest('hex');const a=Buffer.from(receivedHash,'hex'),b=Buffer.from(expected,'hex');if(a.length!==b.length||!crypto.timingSafeEqual(a,b))return{ok:false,error:'signature_mismatch'};let user=null;const rawUser=params.get('user');if(rawUser){try{user=JSON.parse(rawUser)}catch{return{ok:false,error:'invalid_user'}}}return{ok:true,authDate,user,params}}
-export function isAllowedTarget(chatId,validated,env=process.env){const target=String(chatId).trim();if(!target)return false;const scope=(env.SEND_SCOPE||'self').toLowerCase();if(scope==='any')return true;const allowed=new Set((env.ALLOWED_CHAT_IDS||'').split(',').map(x=>x.trim()).filter(Boolean));if(allowed.has(target))return true;const userId=validated?.user?.id;return userId!==undefined&&userId!==null&&String(userId)===target}
+
+export function destinationId(chatId,secret){return'd_'+crypto.createHmac('sha256',secret).update('rmdtxtml:destination:'+String(chatId)).digest('base64url').slice(0,22)}
+export function authorizedDestinations(validated,env=process.env,secret=''){
+  const out=[],seen=new Set(),scope=(env.SEND_SCOPE||'self').toLowerCase(),userId=validated?.user?.id;
+  if(userId!==undefined&&userId!==null&&scope!=='none'){
+    const chatId=String(userId);out.push({id:'self',label:'Minhas mensagens',chatId});seen.add(chatId)
+  }
+  let configured=[];
+  try{const parsed=JSON.parse(env.AUTHORIZED_DESTINATIONS||'[]');if(Array.isArray(parsed))configured=parsed}catch{}
+  for(const item of configured){
+    const chatId=String(item?.chat_id??item?.chatId??'').trim();if(!chatId||seen.has(chatId))continue;
+    const label=String(item?.label||item?.name||'Destino autorizado').trim().slice(0,80)||'Destino autorizado';
+    out.push({id:destinationId(chatId,secret),label,chatId});seen.add(chatId)
+  }
+  for(const raw of String(env.ALLOWED_CHAT_IDS||'').split(',')){
+    const chatId=raw.trim();if(!chatId||seen.has(chatId))continue;
+    out.push({id:destinationId(chatId,secret),label:'Destino autorizado',chatId});seen.add(chatId)
+  }
+  return out
+}
+export function publicDestinations(validated,env=process.env,secret=''){return authorizedDestinations(validated,env,secret).map(({id,label})=>({id,label}))}
+export function resolveDestination(id,validated,env=process.env,secret=''){const value=String(id||'').trim();return authorizedDestinations(validated,env,secret).find(x=>x.id===value)?.chatId||null}
 
 const BLOCK_TAGS=new Set(['p','h1','h2','h3','h4','h5','h6','footer','hr','ul','ol','li','blockquote','aside','pre','tg-math-block','tg-collage','tg-slideshow','table','tr','details','tg-map','tg-button-row','figure','img','video','audio','tg-document']);
 const VOID_TAGS=new Set(['hr','br','img','input']);
@@ -30,4 +51,16 @@ function richStructure(html){
 }
 function richTextLength(html){return [...html.replace(/<[^>]*>/g,'').replace(/&(?:#\d+|#x[\da-f]+|lt|gt|amp|quot|apos|nbsp|hellip|mdash|ndash|lsquo|rsquo|ldquo|rdquo);/gi,'x')].length}
 export function validateRichHtml(html){if(typeof html!=='string')return{ok:false,error:'html_required'};const trimmed=html.trim();if(!trimmed)return{ok:false,error:'empty_message'};if(richTextLength(trimmed)>32768)return{ok:false,error:'text_too_long'};if(/<\s*(script|iframe|object|embed|style|link|meta)\b/i.test(trimmed))return{ok:false,error:'unsafe_tag'};if(/<[^>]+\son[a-z]+\s*=/i.test(trimmed))return{ok:false,error:'unsafe_attribute'};if(/<[^>]+\b(?:href|src|url)\s*=\s*(['"]?)\s*javascript:/i.test(trimmed))return{ok:false,error:'unsafe_url'};const structure=richStructure(trimmed);if(!structure.ok)return structure;return{ok:true,html:trimmed,...structure}}
-export async function telegramCall(token,method,body,{fetchImpl=fetch}={}){let response;try{response=await fetchImpl(`https://api.telegram.org/bot${token}/${method}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})}catch(error){if(error&&typeof error==='object')error.telegramResponse=false;throw error}let data;try{data=await response.json()}catch{const error=new Error(`Telegram retornou HTTP ${response.status} sem JSON válido`);error.telegramResponse=false;throw error}if(data?.ok===false){const error=new Error(data?.description||`Telegram HTTP ${response.status}`);error.telegramResponse=true;throw error}if(!response.ok||data?.ok!==true){const error=new Error(data?.description||`Telegram HTTP ${response.status}`);error.telegramResponse=false;throw error}return data}
+export async function telegramCall(token,method,body,{fetchImpl=fetch,timeoutMs=15000}={}){
+  let response;
+  try{
+    const options={method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)};
+    if(typeof AbortSignal?.timeout==='function')options.signal=AbortSignal.timeout(Math.max(1000,Number(timeoutMs)||15000));
+    response=await fetchImpl(`https://api.telegram.org/bot${token}/${method}`,options)
+  }catch(error){if(error&&typeof error==='object')error.telegramResponse=false;throw error}
+  let data;
+  try{data=await response.json()}catch{const error=new Error(`Telegram retornou HTTP ${response.status} sem JSON válido`);error.telegramResponse=false;throw error}
+  if(data?.ok===false){const error=new Error(data?.description||`Telegram HTTP ${response.status}`);error.telegramResponse=true;throw error}
+  if(!response.ok||data?.ok!==true){const error=new Error(data?.description||`Telegram HTTP ${response.status}`);error.telegramResponse=false;throw error}
+  return data
+}

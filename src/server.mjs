@@ -4,9 +4,10 @@ import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {readFile,stat} from 'node:fs/promises';
 import {Store} from './store.mjs';
-import {isAllowedTarget,telegramCall,validateInitData,validateRichHtml} from './telegram.mjs';
+import {publicDestinations,resolveDestination,telegramCall,validateInitData,validateRichHtml} from './telegram.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../docs');
+const version=process.env.APP_VERSION||'1.0.0';
 const port=Number(process.env.PORT||3000),maxBody=512*1024;
 const mime=new Map([
   ['.html','text/html; charset=utf-8'],['.js','text/javascript; charset=utf-8'],['.css','text/css; charset=utf-8'],
@@ -84,6 +85,15 @@ async function claimTransfer(req,res,{botToken,env,headers,data}){
   return json(res,200,{ok:true,transfer},headers)
 }
 
+async function bootstrap(req,res,{token,env,headers}){
+  if(!trustedOrigin(req,env))return json(res,403,{ok:false,error:'Origem não autorizada'},headers);
+  if(!token)return json(res,503,{ok:false,error:'BOT_TOKEN não configurado no servidor'},headers);
+  const input=await bodyJson(req);
+  const validated=validateInitData(typeof input.initData==='string'?input.initData:'',token,{maxAgeSeconds:Number(env.INIT_DATA_MAX_AGE||86400)});
+  if(!validated.ok)return json(res,401,{ok:false,error:`Sessão Telegram inválida: ${validated.error}`},headers);
+  return json(res,200,{ok:true,destinations:publicDestinations(validated,env,token)},headers)
+}
+
 async function send(req,res,{token,env,fetchImpl,headers,data}){
   if(!trustedOrigin(req,env))return json(res,403,{ok:false,error:'Origem não autorizada'},headers);
   if(!token)return json(res,503,{ok:false,error:'BOT_TOKEN não configurado no servidor'},headers);
@@ -96,8 +106,8 @@ async function send(req,res,{token,env,fetchImpl,headers,data}){
   if(!gate.ok)return json(res,429,{ok:false,error:'Muitos envios; tente novamente em instantes'},{...headers,'retry-after':gate.retryAfter});
   const requestId=typeof input.requestId==='string'?input.requestId:'';
   if(!validRequestId(requestId))return json(res,400,{ok:false,error:'requestId inválido'},headers);
-  const chatId=typeof input.chatId==='number'||typeof input.chatId==='string'?String(input.chatId).trim():'';
-  if(!isAllowedTarget(chatId,validated,env))return json(res,403,{ok:false,error:'Destino não autorizado para esta Mini App'},headers);
+  const chatId=resolveDestination(input.destinationId,validated,env,token);
+  if(!chatId)return json(res,403,{ok:false,error:'Destino não autorizado para esta Mini App'},headers);
   const checked=validateRichHtml(input.html);
   if(!checked.ok)return json(res,400,{ok:false,error:`Conteúdo inválido: ${checked.error}`},headers);
 
@@ -134,8 +144,8 @@ async function serveStatic(req,res){
   try{
     const info=await stat(candidate);if(!info.isFile())throw new Error('not_file');
     const data=await readFile(candidate);
-    res.writeHead(200,{'content-type':mime.get(path.extname(candidate))||'application/octet-stream','content-length':data.length,'cache-control':path.extname(candidate)==='.html'?'no-cache':'public, max-age=300','x-content-type-options':'nosniff'});
-    res.end(data)
+    res.writeHead(200,{'content-type':mime.get(path.extname(candidate))||'application/octet-stream','content-length':data.length,'cache-control':path.extname(candidate)==='.html'?'no-cache':'public, max-age=300','x-content-type-options':'nosniff','referrer-policy':'no-referrer','permissions-policy':'camera=(), microphone=()'});
+    res.end(req.method==='HEAD'?undefined:data)
   }catch{
     if(pathname!=='/index.html'&&!path.extname(pathname)){req.url='/index.html';return serveStatic(req,res)}
     return json(res,404,{ok:false,error:'not_found'})
@@ -150,8 +160,9 @@ export function createServer({botToken=process.env.BOT_TOKEN||'',env=process.env
       if(req.method==='OPTIONS'&&req.url?.startsWith('/api/')){res.writeHead(204,headers);return res.end()}
       if(req.method==='GET'&&req.url?.startsWith('/api/health')){
         data.prune();
-        return json(res,200,{ok:true,botConfigured:Boolean(token),sendScope:env.SEND_SCOPE||'self',storage:data.health()},headers)
+        return json(res,200,{ok:true,version,botConfigured:Boolean(token),sendScope:env.SEND_SCOPE||'self',storage:data.health()},headers)
       }
+      if(req.method==='POST'&&req.url==='/api/bootstrap')return await bootstrap(req,res,{token,env,headers});
       if(req.method==='POST'&&req.url==='/api/transfers')return await createTransfer(req,res,{botToken:token,env,fetchImpl,headers,data});
       if(req.method==='POST'&&req.url==='/api/transfers/claim')return await claimTransfer(req,res,{botToken:token,env,headers,data});
       if(req.method==='POST'&&req.url==='/api/send')return await send(req,res,{token,env,fetchImpl,headers,data});
@@ -169,13 +180,16 @@ export function createServer({botToken=process.env.BOT_TOKEN||'',env=process.env
 if(process.argv[1]===fileURLToPath(import.meta.url)){
   const server=createServer();
   server.listen(port,async()=>{
-    console.log(`RMDtxtML http://localhost:${port}`);
+    console.log(`RMDtxtML ${version} http://localhost:${port}`);
     const token=process.env.BOT_TOKEN||'',appUrl=process.env.APP_URL||'';
     if(token&&/^https:\/\//i.test(appUrl)){
       try{
+        const me=await telegramCall(token,'getMe',{});
+        botName=String(me?.result?.username||botName||'');
+        console.log(`Telegram bot ready: ${botName?'@'+botName:'username unavailable'} · mainMiniApp=${me?.result?.has_main_web_app===true?'yes':'no'}`);
         await telegramCall(token,'setChatMenuButton',{menu_button:{type:'web_app',text:'RMDtxtML',web_app:{url:appUrl}}});
         console.log(`Telegram menu configured: ${appUrl}`)
-      }catch(error){console.error('Could not configure Telegram menu:',error instanceof Error?error.message:error)}
+      }catch(error){console.error('Could not configure Telegram bot:',error instanceof Error?error.message:error)}
     }
   })
 }
