@@ -13,12 +13,12 @@ function button(){
   }
 }
 function telegram(overrides={}){
-  const handlers=new Map(),BackButton=button(),MainButton=button();
+  const handlers=new Map(),BackButton=button(),MainButton=button(),SettingsButton=button();
   return{
     initData:'signed',initDataUnsafe:{user:{id:42}},platform:'ios',version:'10.3',
     viewportHeight:700,viewportStableHeight:680,isExpanded:true,isFullscreen:false,isActive:true,
     safeAreaInset:{top:8,right:2,bottom:6,left:2},contentSafeAreaInset:{top:4,right:3,bottom:10,left:3},
-    BackButton,MainButton,
+    BackButton,MainButton,SettingsButton,
     onEvent(name,fn){handlers.set(name,fn)},emit(name,data){handlers.get(name)?.(data)},
     ready(){this.readyCalled=true},expand(){this.expandCalled=true},requestFullscreen(){this.fullscreenRequested=true},
     setHeaderColor(v){this.header=v},setBackgroundColor(v){this.background=v},setBottomBarColor(v){this.bottom=v},
@@ -71,6 +71,7 @@ test('native back and main buttons are controlled by one platform boundary',asyn
   let backs=0,mains=0;
   env.platform.setBack(()=>backs++);assert.equal(tg.BackButton.visible,true);tg.BackButton.handler();assert.equal(backs,1);
   env.platform.setBack(null);assert.equal(tg.BackButton.visible,false);
+  let settings=0;env.platform.setSettings(()=>settings++);assert.equal(tg.SettingsButton.visible,true);tg.SettingsButton.handler();assert.equal(settings,1);env.platform.setSettings(null);assert.equal(tg.SettingsButton.visible,false);
   env.platform.setMain({text:'Enviar',visible:true,enabled:false,busy:true,onClick:()=>mains++});
   assert.equal(tg.MainButton.text,'Enviar');assert.equal(tg.MainButton.visible,true);assert.equal(tg.MainButton.active,false);assert.equal(tg.MainButton.progress,true);
   tg.MainButton.active=true;tg.MainButton.handler();assert.equal(mains,1);

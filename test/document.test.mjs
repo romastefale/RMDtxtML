@@ -145,3 +145,16 @@ test('inline keyboard participates in revision snapshots',async()=>{
   doc=await store.save(doc,{checkpoint:true,normalizeModel,migrateHtml});
   assert.deepEqual(doc.revisions.at(-1).options.inlineKeyboard,[[{text:'A',type:'url',url:'https://a.example'}]])
 });
+
+
+test('document name is persistent metadata and follows Web to Telegram adoption',async()=>{
+  const{RMD}=await runtime();
+  const doc=RMD.normalizeDocument({schema:2,format:'semantic',content:{model:model('Oi'),modelVersion:2},meta:{name:'Mensagem cliente'}},{normalizeModel,migrateHtml});
+  assert.equal(doc.meta.name,'Mensagem cliente');
+  const adopted=RMD.adoptTransferDocument(doc,{
+    html:'<p>Novo</p>',
+    semantic:{schema:2,format:'semantic',modelVersion:2,model:model('Novo')},
+    document:{id:'document_name_001',revision:3,name:'Mensagem Web'}
+  },{normalizeModel,migrateHtml,migrateModel:m=>m});
+  assert.equal(adopted.meta.name,'Mensagem Web')
+});

@@ -30,7 +30,7 @@ function normalizeKeyboard(value){
 }
 function base(model=EMPTY){
   const time=now();
-  return{schema:SCHEMA,id:uid(),format:'semantic',content:{model:clone(model),modelVersion:MODEL_VERSION},options:{isRtl:false,skipEntityDetection:false,inlineKeyboard:[]},meta:{createdAt:time,updatedAt:time,revision:0},revisions:[]};
+  return{schema:SCHEMA,id:uid(),format:'semantic',content:{model:clone(model),modelVersion:MODEL_VERSION},options:{isRtl:false,skipEntityDetection:false,inlineKeyboard:[]},meta:{name:'Sem título',createdAt:time,updatedAt:time,revision:0},revisions:[]};
 }
 function legacyHtml(src){
   if(typeof src?.content?.html==='string')return src.content.html;
@@ -58,6 +58,7 @@ function normalize(input,{normalizeModel=defaultNormalize,migrateHtml,migrateMod
   if(src.schema===SCHEMA&&src.migration&&typeof src.migration==='object')doc.migration=clone(src.migration);
   if(src.source&&typeof src.source==='object')doc.source=clone(src.source);
   if(legacy!==null&&!doc.migration)doc.migration={fromSchema:Number.isSafeInteger(Number(src.schema))?Number(src.schema):0,at:now(),original:clone(src)};
+  const name=String(src.meta?.name||src.source?.name||'').trim();doc.meta.name=(name||'Sem título').slice(0,120);
   const created=src.meta?.createdAt;doc.meta.createdAt=typeof created==='string'&&created?created:doc.meta.createdAt;
   const rev=Number(src.meta?.revision);doc.meta.revision=Number.isSafeInteger(rev)&&rev>=0?rev:0;
   if(Array.isArray(src.revisions))doc.revisions=src.revisions.slice(-MAX_REVISIONS).map(r=>{
@@ -157,6 +158,7 @@ function adoptTransfer(current,transfer,{normalizeModel,migrateHtml,migrateModel
   next.options.isRtl=transfer?.isRtl===true;next.options.skipEntityDetection=transfer?.skipEntityDetection===true;
   next.options.inlineKeyboard=normalizeKeyboard(transfer?.publication?.inlineKeyboard);
   const revision=Number(meta.revision);if(!same&&Number.isSafeInteger(revision)&&revision>=0)next.meta.revision=revision;
+  const name=String(meta.name||'').trim();if(name)next.meta.name=name.slice(0,120);
   return next
 }
 function exportDocument(doc){const data=clone(doc);data.schema=SCHEMA;data.format='semantic';return JSON.stringify(data,null,2)}

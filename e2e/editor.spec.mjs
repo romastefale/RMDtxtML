@@ -25,7 +25,7 @@ function telegramScript(startParam=''){
       platform:'ios',version:'10.3',colorScheme:'dark',viewportHeight:720,viewportStableHeight:700,
       isExpanded:true,isFullscreen:false,isActive:true,
       safeAreaInset:{top:8,right:2,bottom:6,left:2},contentSafeAreaInset:{top:4,right:3,bottom:10,left:3},
-      BackButton:button(),MainButton:button(),HapticFeedback:{notificationOccurred(type){this.type=type}},
+      BackButton:button(),MainButton:button(),SettingsButton:button(),HapticFeedback:{notificationOccurred(type){this.type=type}},
       onEvent(name,fn){if(!handlers.has(name))handlers.set(name,new Set());handlers.get(name).add(fn)},
       emit(name,data){for(const fn of handlers.get(name)||[])fn(data)},
       ready(){this.readyCalled=true},expand(){this.expandCalled=true},requestFullscreen(){this.fullscreenRequested=true},
@@ -116,11 +116,11 @@ test('drawer and preview do not mutate the document and restore focus',async({pa
   await expect(page.locator('#drawer')).toHaveAttribute('aria-hidden','true');
   await expect(page.locator('#more')).toBeFocused();
   expect(await page.evaluate(()=>window.RMD.editor.html())).toBe(before);
-  await page.locator('#previewBtn').click();
+  await page.locator('#previewTab').click();
   await expect(page.locator('#editWrap')).toBeHidden();
   await expect(page.locator('#preview')).toContainText('Texto forte');
-  await expect(page.locator('#previewBtn')).toHaveAttribute('aria-pressed','true');
-  await page.locator('#previewBtn').click();
+  await expect(page.locator('#previewTab')).toHaveAttribute('aria-selected','true');
+  await page.locator('#editTab').click();
   await expect(page.locator('#editWrap')).toBeVisible();
   await expect(page.locator('#editor')).toBeFocused();
   expect(await page.locator('#editor').evaluate(el=>el.innerHTML)).toBe(before)
@@ -204,14 +204,19 @@ test('current responsive geometry never clips the editor or touch targets',async
   for(const width of [320,360,390,1024]){
     await page.setViewportSize({width,height:844});
     const geometry=await page.evaluate(()=>({
-      items:[...document.querySelectorAll('.bar > .blockPick,.bar > button')].map(el=>{const x=el.getBoundingClientRect();return{w:x.width,h:x.height}}),
+      items:[...document.querySelectorAll('.bar > .blockPick,.bar > button')].map(el=>{const x=el.getBoundingClientRect(),svg=el.querySelector('svg')?.getBoundingClientRect();return{w:x.width,h:x.height,left:x.left,right:x.right,cy:x.top+x.height/2,sy:svg?svg.top+svg.height/2:null}}),
       bodyOverflow:document.documentElement.scrollWidth-window.innerWidth,
-      font:getComputedStyle(document.querySelector('#editor')).fontSize
+      font:getComputedStyle(document.querySelector('#editor')).fontSize,
+      toolbarBottom:document.querySelector('#toolbar').getBoundingClientRect().bottom,
+      viewport:window.innerHeight
     }));
-    expect(geometry.items.length).toBeGreaterThan(0);
-    expect(geometry.items.every(x=>x.w>=44&&x.h>=44)).toBe(true);
+    expect(geometry.items).toHaveLength(6);
+    expect(geometry.items.every(x=>x.w>=42&&x.h>=42&&x.left>=-0.5&&x.right<=width+0.5)).toBe(true);
+    expect(Math.max(...geometry.items.map(x=>x.cy))-Math.min(...geometry.items.map(x=>x.cy))).toBeLessThanOrEqual(1);
+    expect(geometry.items.filter(x=>x.sy!==null).every(x=>Math.abs(x.sy-x.cy)<=2)).toBe(true);
     expect(geometry.bodyOverflow).toBeLessThanOrEqual(0);
-    expect(geometry.font).toBe('16px')
+    expect(geometry.font).toBe('16px');
+    expect(geometry.toolbarBottom).toBeLessThanOrEqual(geometry.viewport+0.5)
   }
 });
 
@@ -260,8 +265,8 @@ test('Telegram lifecycle uses native controls, stable viewport and safe areas',a
   await telegram(page);
   await expect(page.locator('html')).toHaveAttribute('data-host','telegram');
   await expect(page.locator('.top')).toBeHidden();
-  expect(await page.evaluate(()=>({ready:__tg.readyCalled,expand:__tg.expandCalled,fullscreen:__tg.fullscreenRequested,main:__tg.MainButton.isVisible,text:__tg.MainButton.text})))
-    .toEqual({ready:true,expand:true,fullscreen:true,main:true,text:'Enviar'});
+  expect(await page.evaluate(()=>({ready:__tg.readyCalled,expand:__tg.expandCalled,fullscreen:__tg.fullscreenRequested,main:__tg.MainButton.isVisible,text:__tg.MainButton.text,settings:__tg.SettingsButton.isVisible})))
+    .toEqual({ready:true,expand:true,fullscreen:true,main:true,text:'Enviar',settings:true});
   expect(await page.locator('html').evaluate(el=>el.style.getPropertyValue('--rmd-app-height'))).toBe('700px');
   await page.evaluate(()=>{__tg.viewportHeight=410;__tg.emit('viewportChanged',{isStateStable:false})});
   expect(await page.locator('html').evaluate(el=>el.style.getPropertyValue('--rmd-app-height'))).toBe('700px');
@@ -374,7 +379,7 @@ test('preview and send use the same renderer decision and payload',async({page})
   await page.route('**/api/send',async route=>{body=route.request().postDataJSON();await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,result:{message_id:101}})})});
   await telegram(page);await setEditor(page,'<h2>Mesmo renderer</h2><p>Corpo</p>');
   const expected=await page.evaluate(()=>RMD.editor.render({isRtl:false,skipEntityDetection:false}));
-  await page.locator('#previewBtn').click();await expect(page.locator('#previewMechanism')).toHaveText(expected.mechanism);await page.locator('#previewBtn').click();
+  await page.locator('#previewTab').click();await expect(page.locator('#previewMechanism')).toHaveText(expected.mechanism);await page.locator('#editTab').click();
   await page.evaluate(()=>__tg.MainButton.handler());await expect.poll(()=>body).not.toBeUndefined();expect(body.richMessage).toEqual(expected.richMessage)
 });
 
@@ -386,10 +391,10 @@ test('traditional inline keyboard survives preview, Web handoff and Telegram sen
   await page.route(/https:\/\/t\.me\/.*/,route=>route.fulfill({status:200,contentType:'text/html',body:'<html><body>Telegram</body></html>'}));
   await web(page);await setEditor(page,'<p>Com teclado</p>');
   await page.evaluate(value=>{RMD.application.document().options.inlineKeyboard=value},keyboard);
-  await page.locator('#previewBtn').click();
+  await page.locator('#previewTab').click();
   await expect(page.locator('.previewKeyboard button')).toHaveCount(2);
   await expect(page.locator('.previewKeyboard button').first()).toHaveText('Site');
-  await page.locator('#previewBtn').click();
+  await page.locator('#editTab').click();
   await page.locator('#send').click();await expect.poll(()=>transferBody).not.toBeUndefined();
   expect(transferBody.publication.inlineKeyboard).toEqual(keyboard);
 
@@ -399,4 +404,23 @@ test('traditional inline keyboard survives preview, Web handoff and Telegram sen
   await page.evaluate(value=>{RMD.application.document().options.inlineKeyboard=value},keyboard);
   await page.evaluate(()=>__tg.MainButton.handler());await expect.poll(()=>sendBody).not.toBeUndefined();
   expect(sendBody.inlineKeyboard).toEqual(keyboard)
+});
+
+
+test('document bar persists name and reports local saving states',async({page})=>{
+  await web(page);await expect(page.locator('#docName')).toHaveText('Sem título');await expect(page.locator('#saveState')).toHaveText('Salvo');
+  page.once('dialog',dialog=>dialog.accept('Mensagem cliente'));
+  await page.locator('#docName').click();await expect(page.locator('#docName')).toHaveText('Mensagem cliente');
+  await expect(page.locator('#saveState')).toContainText(/Alterações locais|Salvando|Salvo/);
+  await expect.poll(()=>page.locator('#saveState').textContent()).toBe('Salvo');
+  await page.reload();await waitReady(page);await expect(page.locator('#docName')).toHaveText('Mensagem cliente')
+});
+
+test('H1 H2 H3 are distinct and preview switch does not mutate the document',async({page})=>{
+  await web(page);await setEditor(page,'<p>Título</p>');const before=await page.evaluate(()=>RMD.editor.html());
+  await page.locator('#more').click();await page.locator('[data-action="h1"]').click();await expect(page.locator('#editor > h1')).toHaveText('Título');
+  await page.locator('#block').selectOption('h2');await expect(page.locator('#editor > h2')).toHaveText('Título');
+  await page.locator('#block').selectOption('h3');await expect(page.locator('#editor > h3')).toHaveText('Título');
+  const formatted=await page.evaluate(()=>RMD.editor.html());expect(formatted).not.toBe(before);
+  await page.locator('#previewTab').click();await page.locator('#editTab').click();expect(await page.evaluate(()=>RMD.editor.html())).toBe(formatted)
 });

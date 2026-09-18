@@ -48,9 +48,9 @@ async function botUsername(botToken,env,fetchImpl){
   return botName
 }
 function transferDocument(input){
-  const id=typeof input?.id==='string'?input.id.trim():'',revision=Number(input?.revision);
+  const id=typeof input?.id==='string'?input.id.trim():'',revision=Number(input?.revision),name=String(input?.name||'').trim().slice(0,120);
   if(!/^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/.test(id))return null;
-  return{id,revision:Number.isSafeInteger(revision)&&revision>=0?revision:0}
+  return{id,revision:Number.isSafeInteger(revision)&&revision>=0?revision:0,...(name?{name}:{})}
 }
 function validRequestId(value){return typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_-]{15,79}$/.test(value)}
 function enabled(value){return /^(1|true|yes|on)$/i.test(String(value||''))}

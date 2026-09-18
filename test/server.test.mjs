@@ -101,14 +101,14 @@ test('web transfer is durable-store backed, opaque, authenticated and one-time',
   await withServer(fetch,async base=>{
     const semantic={schema:2,format:'semantic',modelVersion:2,model:{type:'doc',content:[{type:'heading',attrs:{level:2},content:[{type:'text',text:'Web'}]}]}};
     const publication={inlineKeyboard:[[{text:'Site',type:'url',url:'https://example.com'}]]};
-    const created=await post(base,'/api/transfers',{html:'<h2>Web</h2>',isRtl:true,skipEntityDetection:true,document:{id:'00000000-0000-4000-8000-000000000001',revision:7},semantic,publication});
+    const created=await post(base,'/api/transfers',{html:'<h2>Web</h2>',isRtl:true,skipEntityDetection:true,document:{id:'00000000-0000-4000-8000-000000000001',revision:7,name:'Mensagem Web'},semantic,publication});
     assert.equal(created.status,201);const c=await created.json();
     assert.match(c.token,/^[A-Za-z0-9_-]{32}$/);assert.equal(c.telegramUrl,`https://t.me/rmdtxtml_test_bot?startapp=${c.token}`);
     const unauthorized=await post(base,'/api/transfers/claim',{token:c.token,initData:'bad'});
     assert.equal(unauthorized.status,401);
     const claimed=await post(base,'/api/transfers/claim',{token:c.token,initData:initData()}),body=await claimed.json();
     assert.equal(claimed.status,200);assert.equal(body.transfer.html,'<h2>Web</h2>');assert.equal(body.transfer.isRtl,true);
-    assert.deepEqual(body.transfer.document,{id:'00000000-0000-4000-8000-000000000001',revision:7});assert.deepEqual(body.transfer.semantic,semantic);assert.deepEqual(body.transfer.publication,publication);assert.ok(body.transfer.expiresAt> Date.now());
+    assert.deepEqual(body.transfer.document,{id:'00000000-0000-4000-8000-000000000001',revision:7,name:'Mensagem Web'});assert.deepEqual(body.transfer.semantic,semantic);assert.deepEqual(body.transfer.publication,publication);assert.ok(body.transfer.expiresAt> Date.now());
     const again=await post(base,'/api/transfers/claim',{token:c.token,initData:initData()});
     assert.equal(again.status,404)
   })

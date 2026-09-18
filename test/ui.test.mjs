@@ -15,9 +15,12 @@ test('shell uses SVG controls and accessible dialog semantics',async()=>{
   assert.doesNotMatch(html,/[‹×]/)
 });
 
-test('toolbar keeps 44px targets and scrolls instead of compressing',async()=>{
-  const css=await read('docs/app.css');
-  assert.match(css,/\.bar\{[\s\S]*overflow-x:auto/);
+test('toolbar keeps exactly six compact primary controls above the keyboard',async()=>{
+  const [html,css]=await Promise.all([read('docs/index.html'),read('docs/app.css')]);
+  const toolbar=html.match(/<nav id="toolbar"[\s\S]*?<\/nav>/)?.[0]||'';
+  const controls=(toolbar.match(/<button\b|<label class="blockPick"/g)||[]).length;
+  assert.equal(controls,6);
+  assert.match(css,/\.bar\{[\s\S]*grid-template-columns:repeat\(6,44px\)/);
   assert.match(css,/\.bar button,\.blockPick\{[\s\S]*min-width:44px/);
   assert.match(css,/prefers-reduced-motion:reduce/);
   assert.match(css,/:root\[data-host="telegram"\] \.top\{display:none\}/)
@@ -58,4 +61,17 @@ test('every declared drawer action has an implementation',async()=>{
   const declared=[...html.matchAll(/data-action="([^"]+)"/g)].map(m=>m[1]);
   const body=app.slice(app.indexOf('const actions={'),app.indexOf("$$('[data-action]').forEach"));
   for(const action of declared)assert.match(body,new RegExp('(?:^|\\n\\s*)'+action+':'),`missing action: ${action}`)
+});
+
+test('document bar exposes persistent name, save state and edit-preview tabs',async()=>{
+  const [html,css]=await Promise.all([read('docs/index.html'),read('docs/app.css')]);
+  assert.match(html,/class="documentBar"/);assert.match(html,/id="docName"/);assert.match(html,/id="saveState"/);
+  assert.match(html,/role="tablist"/);assert.match(html,/id="editTab"[^>]*role="tab"/);assert.match(html,/id="previewTab"[^>]*role="tab"/);
+  assert.match(css,/\.documentBar\{/);assert.match(css,/:root\[data-view="preview"\] \.bar\{display:none\}/)
+});
+
+test('H1 H2 H3 remain distinct actions and orange is the application accent',async()=>{
+  const [html,app,css]=await Promise.all([read('docs/index.html'),read('docs/app.js'),read('docs/app.css')]);
+  for(const level of ['h1','h2','h3']){assert.match(html,new RegExp('data-action="'+level+'"'));assert.match(app,new RegExp(level+':\\(\\)=>core\\.block\\(\''+level+'\'\\)'))}
+  assert.match(css,/--app-accent:#ff7a00/);assert.match(css,/--accent:var\(--app-accent\)/)
 });

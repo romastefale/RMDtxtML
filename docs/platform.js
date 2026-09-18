@@ -40,7 +40,7 @@ function syncViewport({stable=true}={}){
 const events=new Map();
 function emit(name,detail){for(const fn of events.get(name)||[])try{fn(detail)}catch(error){console.error(error)}}
 function on(name,fn){if(!events.has(name))events.set(name,new Set());events.get(name).add(fn);return()=>events.get(name)?.delete(fn)}
-let backHandler=null,mainHandler=null;
+let backHandler=null,mainHandler=null,settingsHandler=null;
 function setBack(handler){
   backHandler=typeof handler==='function'?handler:null;
   if(!isTelegram())return;
@@ -48,17 +48,25 @@ function setBack(handler){
   if(backHandler){tg.BackButton?.onClick?.(handleBack);tg.BackButton?.show?.()}else tg.BackButton?.hide?.()
 }
 function handleBack(){backHandler?.()}
+function setSettings(handler){
+  settingsHandler=typeof handler==='function'?handler:null;
+  if(!isTelegram())return;
+  const b=tg.SettingsButton;if(!b)return;
+  b.offClick?.(handleSettings);
+  if(settingsHandler){b.onClick?.(handleSettings);b.show?.()}else b.hide?.()
+}
+function handleSettings(){settingsHandler?.()}
 function setMain({text='Enviar',visible=true,enabled=true,busy=false,onClick}={}){
   if(typeof onClick==='function')mainHandler=onClick;
   if(!isTelegram())return;
-  const b=tg.MainButton;if(!b)return;
+  const b=tg.MainButton||tg.BottomButton;if(!b)return;
   b.offClick?.(handleMain);if(mainHandler)b.onClick?.(handleMain);
   b.setText?.(text);
   enabled?b.enable?.():b.disable?.();
   visible?b.show?.():b.hide?.();
   busy?b.showProgress?.(false):b.hideProgress?.()
 }
-function handleMain(){if(tg?.MainButton?.isActive===false)return;mainHandler?.()}
+function handleMain(){const b=tg?.MainButton||tg?.BottomButton;if(b?.isActive===false)return;mainHandler?.()}
 function dirty(value){
   if(!isTelegram())return;
   value?tg.enableClosingConfirmation?.():tg.disableClosingConfirmation?.()
@@ -121,5 +129,5 @@ async function json(path,{method='GET',body,auth=false}={}){
   return data
 }
 window.RMD=window.RMD||{};
-window.RMD.platform={tg,isTelegram,api,startParam,userId,launch,boot,on,setBack,setMain,dirty,keyboard,haptic,close,colorScheme,fullscreen,syncViewport,syncInsets,cleanStartParam,json};
+window.RMD.platform={tg,isTelegram,api,startParam,userId,launch,boot,on,setBack,setSettings,setMain,dirty,keyboard,haptic,close,colorScheme,fullscreen,syncViewport,syncInsets,cleanStartParam,json};
 })();

@@ -2,8 +2,10 @@
 const platform=RMD.platform,app=RMD.application,tg=platform.tg,send=document.querySelector('#send');
 if(!send||!app)return;
 const setBusy=(busy,label)=>{
-  if(platform.isTelegram())platform.setMain({text:label||'Enviar',visible:true,enabled:!busy,busy,onClick:app.sendMessage});
-  else{send.disabled=busy;if(label)send.textContent=label}
+  if(platform.isTelegram()){
+    if(busy)platform.setMain({text:label||'Enviar',visible:true,enabled:false,busy:true,onClick:app.sendMessage});
+    else app.refreshSend?.()
+  }else{send.disabled=busy;if(label)send.textContent=label}
 };
 async function claim(){
   await app.ready();
