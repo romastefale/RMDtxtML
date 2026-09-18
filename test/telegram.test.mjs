@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {isAllowedTarget,signInitData,validateInitData,validateRichHtml} from '../src/telegram.mjs';
+import {isAllowedTarget,signInitData,telegramCall,validateInitData,validateRichHtml} from '../src/telegram.mjs';
 
 const token='123456:TEST_TOKEN';
 const now=Date.UTC(2026,8,17,18,0,0);
@@ -19,3 +19,22 @@ test('enforces maximum of 500 blocks',()=>{assert.equal(validateRichHtml('<p>x</
 test('enforces maximum nesting depth of 16',()=>{const nest=n=>'<details>'.repeat(n)+'x'+'</details>'.repeat(n);assert.equal(validateRichHtml(nest(16)).ok,true);assert.equal(validateRichHtml(nest(17)).error,'nesting_too_deep')});
 test('enforces maximum of 50 media attachments',()=>{assert.equal(validateRichHtml('<img src="https://x.test/a">'.repeat(50)).ok,true);assert.equal(validateRichHtml('<img src="https://x.test/a">'.repeat(51)).error,'too_many_media')});
 test('enforces maximum of 20 table columns including colspan',()=>{const cells=n=>Array.from({length:n},()=>'<td>x</td>').join('');assert.equal(validateRichHtml(`<table><tr>${cells(20)}</tr></table>`).ok,true);assert.equal(validateRichHtml(`<table><tr>${cells(21)}</tr></table>`).error,'too_many_table_columns');assert.equal(validateRichHtml('<table><tr><td colspan="21">x</td></tr></table>').error,'too_many_table_columns')});
+
+
+test('telegramCall marks explicit Bot API rejection as confirmed',async()=>{
+  await assert.rejects(
+    ()=>telegramCall(token,'sendRichMessage',{}, {fetchImpl:async()=>new Response(JSON.stringify({ok:false,description:'Bad Request'}),{status:400,headers:{'content-type':'application/json'}})}),
+    error=>error.telegramResponse===true&&/Bad Request/.test(error.message)
+  )
+});
+
+test('telegramCall keeps malformed or transport responses uncertain',async()=>{
+  await assert.rejects(
+    ()=>telegramCall(token,'sendRichMessage',{}, {fetchImpl:async()=>new Response('gateway failure',{status:502})}),
+    error=>error.telegramResponse===false
+  );
+  await assert.rejects(
+    ()=>telegramCall(token,'sendRichMessage',{}, {fetchImpl:async()=>{throw new Error('socket closed')}}),
+    error=>error.telegramResponse===false
+  )
+});
