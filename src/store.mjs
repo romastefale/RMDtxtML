@@ -9,10 +9,10 @@ const parse=x=>{try{return JSON.parse(x)}catch{return null}};
 export class Store{
   constructor({env=process.env,dbPath}={}){
     const mount=clean(env.RAILWAY_VOLUME_MOUNT_PATH);
-    this.persistent=Boolean(mount);
+    this.persistent=Boolean(mount)&&!dbPath;
     this.dir=mount||path.resolve('data');
-    mkdirSync(this.dir,{recursive:true});
     this.path=dbPath||path.join(this.dir,'rmdtxtml.sqlite');
+    if(this.path!==':memory:')mkdirSync(path.dirname(this.path),{recursive:true});
     this.db=new DatabaseSync(this.path,{timeout:5000});
     this.db.exec(`
       PRAGMA journal_mode=WAL;
