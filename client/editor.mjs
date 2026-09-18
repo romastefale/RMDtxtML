@@ -176,7 +176,8 @@ function parseHtml(html){
   return normalizeModel(doc.toJSON())
 }
 function normalizeModel(json){
-  try{return schema.nodeFromJSON(json||EMPTY).toJSON()}catch{return structuredClone(EMPTY)}
+  if(json===undefined||json===null)return structuredClone(EMPTY);
+  try{return schema.nodeFromJSON(json).toJSON()}catch{throw new Error('invalid_semantic_model')}
 }
 function toHtml(json){
   const node=schema.nodeFromJSON(normalizeModel(json)),frag=DOMSerializer.fromSchema(schema).serializeFragment(node.content);
