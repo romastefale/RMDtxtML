@@ -2,14 +2,16 @@ import {test,expect} from '@playwright/test';
 
 const telegramPattern=/https:\/\/telegram\.org\/js\/telegram-web-app\.js/;
 
-async function waitReady(page){
-  await page.waitForFunction(()=>window.RMD?.ready);
-  await page.evaluate(()=>window.RMD.ready)
+async function waitReady(page,errors=[]){
+  try{await page.waitForFunction(()=>window.RMD?.ready,{timeout:5000});await page.evaluate(()=>window.RMD.ready)}
+  catch(error){throw new Error('RMD startup failed'+(errors.length?'\n'+errors.join('\n'):'\nNo pageerror captured'),{cause:error})}
 }
+function captureStartupErrors(page){const errors=[];page.on('pageerror',error=>errors.push(error.stack||error.message));return errors}
 async function web(page,path='/'){
+  const errors=captureStartupErrors(page);
   await page.route(telegramPattern,route=>route.fulfill({status:200,contentType:'application/javascript',body:''}));
   await page.goto(path);
-  await waitReady(page)
+  await waitReady(page,errors)
 }
 function telegramScript(startParam=''){
   return `(()=>{
@@ -37,10 +39,11 @@ function telegramScript(startParam=''){
   })();`
 }
 async function telegram(page,{path='/',startParam=''}={}){
+  const errors=captureStartupErrors(page);
   await page.route('**/api/bootstrap',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,destinations:[{id:'self',label:'Minhas mensagens'}]})}));
   await page.route(telegramPattern,route=>route.fulfill({status:200,contentType:'application/javascript',body:telegramScript(startParam)}));
   await page.goto(path);
-  await waitReady(page)
+  await waitReady(page,errors)
 }
 async function setEditor(page,html){
   await page.evaluate(value=>window.RMD.editor.setHtml(value,{history:false}),html);
