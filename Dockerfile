@@ -9,6 +9,7 @@ RUN node --check docs/platform.js \
  && node --check docs/document.js \
  && node --check docs/app.js \
  && node --check docs/transfer.js \
+ && node --check src/store.mjs \
  && node --check src/server.mjs \
  && node --check src/telegram.mjs \
  && npm test
