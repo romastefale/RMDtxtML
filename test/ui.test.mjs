@@ -7,7 +7,8 @@ const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
 test('shell uses SVG controls and accessible dialog semantics',async()=>{
   const html=await read('docs/index.html');
   assert.match(html,/id="back"[^>]*><svg><use href="#i-back"/);
-  assert.match(html,/id="previewBtn"[^>]*aria-pressed="false"/);
+  assert.match(html,/id="editTab"[^>]*role="tab"[^>]*aria-selected="true"/);
+  assert.match(html,/id="previewTab"[^>]*role="tab"[^>]*aria-selected="false"/);
   assert.match(html,/id="save"[^>]*><svg><use href="#i-save"/);
   assert.match(html,/id="drawer"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-hidden="true"/);
   assert.match(html,/id="close"[^>]*><svg><use href="#i-close"/);
