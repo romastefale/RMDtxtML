@@ -1,19 +1,29 @@
 {
   "name": "rmdtxtml",
-  "version": "1.0.0",
+  "version": "1.1.0-rc.1",
   "private": true,
   "type": "module",
   "description": "Production Telegram Mini App + Web editor for Bot API 10.3 Rich Messages",
   "engines": {
-    "node": ">=22"
+    "node": ">=24.15"
   },
   "scripts": {
     "start": "node src/server.mjs",
     "test:unit": "node --test test/*.test.mjs",
     "test:e2e": "playwright test",
-    "test": "npm run test:unit && npm run test:e2e"
+    "test": "npm run test:unit && npm run test:e2e",
+    "build": "esbuild client/editor.mjs --bundle --format=iife --target=es2022 --outfile=docs/editor.js"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0"
+    "@playwright/test": "1.63.0",
+    "esbuild": "0.28.2",
+    "prosemirror-commands": "1.7.2",
+    "prosemirror-gapcursor": "1.8.3",
+    "prosemirror-history": "1.5.0",
+    "prosemirror-keymap": "1.2.3",
+    "prosemirror-model": "1.25.11",
+    "prosemirror-schema-list": "1.5.1",
+    "prosemirror-state": "1.4.4",
+    "prosemirror-view": "1.42.3"
   }
 }
