@@ -212,6 +212,18 @@ test('caret and focus survive viewport resize and theme changes dynamically',asy
   await page.emulateMedia({colorScheme:'light'});await expect(page.locator('html')).toHaveAttribute('data-theme','light')
 });
 
+test('semantic empty document is blocked while non-text structural content is valid',async({page})=>{
+  let calls=0;
+  await page.route('**/api/transfers',async route=>{
+    calls++;await route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({ok:true,token:'c'.repeat(32),expiresAt:Date.now()+60000,telegramUrl:'https://t.me/rmdtxtml_test_bot?startapp='+('c'.repeat(32))})})
+  });
+  await page.route(/https:\/\/t\.me\/.*/,route=>route.fulfill({status:200,contentType:'text/html',body:'<html><body>Telegram</body></html>'}));
+  await web(page);await page.evaluate(()=>RMD.editor.setModel({type:'doc',content:[{type:'paragraph'}]},{history:false}));
+  await page.locator('#send').click();await expect(page.locator('#toast')).toContainText('Escreva ou adicione algum conteúdo');expect(calls).toBe(0);
+  await page.locator('#more').click();await page.locator('[data-action="divider"]').click();
+  await page.locator('#send').click();await expect.poll(()=>calls).toBe(1)
+});
+
 test('Telegram lifecycle uses native controls, stable viewport and safe areas',async({page})=>{
   await telegram(page);
   await expect(page.locator('html')).toHaveAttribute('data-host','telegram');
