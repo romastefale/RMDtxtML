@@ -14,64 +14,11 @@ let skipEntityDetection=false;
 const store=new RMD.DocumentStore();
 let doc=null,saveTimer=0,sendRequestId='',destinationId='';
 
-const ALIASES={B:'STRONG',I:'EM',INS:'U',STRIKE:'S',DEL:'S'};
-const TAGS=new Set('A B STRONG I EM U INS S STRIKE DEL CODE PRE MARK SUB SUP TG-SPOILER TG-REFERENCE TG-EMOJI TG-TIME TG-MATH H1 H2 H3 H4 H5 H6 P FOOTER HR UL OL LI INPUT BR BLOCKQUOTE CITE ASIDE IMG VIDEO AUDIO TG-DOCUMENT FIGURE FIGCAPTION TG-MAP TG-COLLAGE TG-SLIDESHOW TABLE CAPTION THEAD TBODY TR TH TD DETAILS SUMMARY TG-MATH-BLOCK TG-BUTTON TG-BUTTON-ROW'.split(' '));
-const ATTRS={
-  A:new Set(['href','name']),CODE:new Set(['class']),OL:new Set(['start','type','reversed']),LI:new Set(['value','type']),INPUT:new Set(['type','checked']),
-  BLOCKQUOTE:new Set(['expandable']),IMG:new Set(['src','alt','tg-spoiler']),VIDEO:new Set(['src','tg-spoiler']),AUDIO:new Set(['src']),['TG-DOCUMENT']:new Set(['src']),
-  ['TG-MAP']:new Set(['lat','long','zoom']),TABLE:new Set(['bordered','striped','compact']),TH:new Set(['colspan','rowspan','align','valign']),TD:new Set(['colspan','rowspan','align','valign']),
-  DETAILS:new Set(['open']),['TG-REFERENCE']:new Set(['name']),['TG-EMOJI']:new Set(['emoji-id']),['TG-TIME']:new Set(['unix','format']),
-  ['TG-BUTTON']:new Set(['type','style','url','data','forward-text','request-write-access','query','allow-user-chats','allow-bot-chats','allow-group-chats','allow-channel-chats','text']),
-  ['TG-BUTTON-ROW']:new Set(['align'])
-};
-const BLOCK_SELECTOR='h1,h2,h3,h4,h5,h6,p,footer,pre,ul,ol,blockquote,aside,figure,tg-map,tg-collage,tg-slideshow,table,details,tg-math-block,tg-button-row,hr';
-const BOOL_ATTRS=new Set(['checked','reversed','expandable','tg-spoiler','bordered','striped','compact','open','request-write-access','allow-user-chats','allow-bot-chats','allow-group-chats','allow-channel-chats']);
-
 function syncTheme(){const dark=platform.isTelegram()?platform.colorScheme()==='dark':themeQuery.matches;document.documentElement.dataset.theme=dark?'dark':'light';document.documentElement.style.colorScheme=dark?'dark':'light'}
 function say(message){toast.textContent=message;toast.classList.add('show');clearTimeout(say.t);say.t=setTimeout(()=>toast.classList.remove('show'),2200)}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function validHref(v){return /^(#|https?:|mailto:|tel:|tg:\/\/user\?id=)/i.test(v)}
-function validSrc(v){return /^https?:\/\//i.test(v)||/^tg:\/\/emoji\?id=/i.test(v)}
 function validButtonUrl(v){return /^https?:\/\//i.test(v)||/^tg:\/\/user\?id=/i.test(v)}
-function allowedAttr(tag,name,value){
-  if(name.startsWith('on'))return false;
-  const set=ATTRS[tag];
-  if(!set?.has(name))return false;
-  if(tag==='A'&&name==='href')return validHref(value);
-  if(['IMG','VIDEO','AUDIO','TG-DOCUMENT'].includes(tag)&&name==='src')return validSrc(value);
-  if(tag==='TG-BUTTON'&&name==='url')return validButtonUrl(value);
-  if(tag==='INPUT'&&name==='type')return value.toLowerCase()==='checkbox';
-  if(tag==='CODE'&&name==='class')return /^language-[a-z0-9_+.-]+$/i.test(value);
-  if(tag==='TG-BUTTON'&&name==='style')return /^(primary|danger|success|link)$/i.test(value);
-  if(tag==='TG-BUTTON-ROW'&&name==='align')return /^(left|center|right)$/i.test(value);
-  if(['TH','TD'].includes(tag)&&name==='align')return /^(left|center|right)$/i.test(value);
-  if(['TH','TD'].includes(tag)&&name==='valign')return /^(top|middle|bottom)$/i.test(value);
-  return true;
-}
-function sanitizeRichHtml(input){
-  const doc=new DOMParser().parseFromString('<body>'+String(input??'')+'</body>','text/html');
-  const out=document.createElement('div');
-  function copy(node){
-    if(node.nodeType===Node.TEXT_NODE)return document.createTextNode(node.nodeValue||'');
-    if(node.nodeType!==Node.ELEMENT_NODE)return document.createDocumentFragment();
-    const raw=node.tagName.toUpperCase(),tag=ALIASES[raw]||raw;
-    if(!TAGS.has(raw)){
-      const f=document.createDocumentFragment();
-      [...node.childNodes].forEach(child=>f.append(copy(child)));
-      return f;
-    }
-    const el=document.createElement(tag.toLowerCase());
-    for(const attr of [...node.attributes]){
-      const name=attr.name.toLowerCase(),value=attr.value;
-      if(!allowedAttr(tag,name,value))continue;
-      if(BOOL_ATTRS.has(name))el.setAttribute(name,'');else el.setAttribute(name,value);
-    }
-    [...node.childNodes].forEach(child=>el.append(copy(child)));
-    return el;
-  }
-  [...doc.body.childNodes].forEach(node=>out.append(copy(node)));
-  return out.innerHTML.trim();
-}
 function currentHtml(){return core.html()}
 function metrics(){const s=core.stats();return{html:currentHtml(),text:s.text,blocks:s.blocks}}
 function updateStatus(prefix=''){const m=metrics();status.textContent=`${prefix?prefix+' · ':''}${m.text.toLocaleString('pt-BR')}/${MAX_TEXT.toLocaleString('pt-BR')} caracteres · ${m.blocks} blocos`;status.classList.toggle('danger',m.text>MAX_TEXT)}
