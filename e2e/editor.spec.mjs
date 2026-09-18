@@ -259,7 +259,11 @@ test('start parameter claims a transferred document exactly through the Telegram
   await page.route('**/api/transfers/claim',async route=>{
     body=route.request().postDataJSON();
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,transfer:{
-      html:'<h2>Transferido</h2><p>Continuidade</p>',isRtl:false,skipEntityDetection:false,
+      html:'<p>HTML de compatibilidade</p>',isRtl:false,skipEntityDetection:false,
+      semantic:{schema:2,format:'semantic',model:{type:'doc',content:[
+        {type:'heading',attrs:{level:2},content:[{type:'text',text:'Transferido'}]},
+        {type:'paragraph',content:[{type:'text',text:'Continuidade'}]}
+      ]}},
       document:{id:'00000000-0000-4000-8000-000000000001',revision:7},expiresAt:Date.now()+60000
     }})})
   });
@@ -283,5 +287,7 @@ test('Web handoff sends document identity before navigating to Telegram',async({
   await expect.poll(()=>body).not.toBeUndefined();
   expect(body.html).toContain('<h2>Web</h2>');
   expect(body.document.id).toMatch(/^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/);
+  expect(body.semantic.schema).toBe(2);expect(body.semantic.format).toBe('semantic');
+  expect(body.semantic.model.type).toBe('doc');
   await page.waitForURL(/t\.me\/rmdtxtml_test_bot/)
 });
