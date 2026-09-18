@@ -9,6 +9,7 @@ COPY test ./test
 COPY e2e ./e2e
 COPY playwright.config.mjs ./
 COPY Dockerfile ./
+COPY index.html ./
 RUN npm run build
 RUN node --check docs/platform.js \
  && node --check docs/editor.js \

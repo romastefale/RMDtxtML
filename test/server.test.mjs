@@ -27,7 +27,7 @@ test('health and readiness distinguish liveness from production requirements',as
   await withServer(fetch,async base=>{
     const response=await fetch(base+'/api/health'),body=await response.json();
     assert.equal(response.status,200);assert.equal(body.ok,true);assert.equal(body.ready,true);assert.equal(body.botConfigured,true);
-    assert.equal(body.version,'1.1.0-rc.1');assert.equal(body.storage.driver,'sqlite');assert.equal(body.storage.persistent,false);assert.equal(body.storage.ok,true)
+    assert.equal(body.version,'1.1.0');assert.equal(body.storage.driver,'sqlite');assert.equal(body.storage.persistent,false);assert.equal(body.storage.ok,true)
   });
   await withServer(fetch,async base=>{
     const response=await fetch(base+'/api/ready'),body=await response.json();
