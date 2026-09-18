@@ -1,6 +1,6 @@
 const ADVANCED=new Set([
   'heading','footer','blockquote','pullquote','code_block','divider','bullet_list','ordered_list',
-  'math_block','anchor','image','video','audio','document','map','collage','slideshow',
+  'math_block','anchor','image','video','audio','voice_note','document','map','collage','slideshow',
   'details','table','button','button_row'
 ]);
 
@@ -175,7 +175,7 @@ export function blockToInput(node){
     if(hasRich(credit))out.credit=credit;return out
   }
   if(node.type==='bullet_list'||node.type==='ordered_list')return{type:'list',items:content.map((item,index)=>listItem(item,index,node))};
-  if(node.type==='image'||node.type==='video'||node.type==='audio'||node.type==='document')
+  if(node.type==='image'||node.type==='video'||node.type==='audio'||node.type==='voice_note'||node.type==='document')
     return mediaBlock(node.type,String(a.src||''),caption(content),a.spoiler===true);
   if(node.type==='map'){
     const out={type:'map',location:{latitude:Number(a.lat),longitude:Number(a.long)}};

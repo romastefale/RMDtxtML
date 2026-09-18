@@ -38,6 +38,17 @@ test('advanced semantic document renders to Bot API 10.3 blocks without parallel
   assert.equal(rendered.richMessage.skip_entity_detection,true)
 });
 
+test('voice note renders as explicit InputRichBlockVoiceNote',()=>{
+  const model={type:'doc',content:[{type:'voice_note',attrs:{src:'https://example.com/voice.ogg',alt:'',spoiler:false},content:[text('Mensagem de voz')]}]};
+  const rendered=renderRichMessage(model,{html:'<audio src="https://example.com/voice.ogg"></audio>'});
+  assert.equal(rendered.mechanism,'Rich Message · Blocks');
+  assert.deepEqual(rendered.richMessage.blocks,[{
+    type:'voice_note',
+    voice_note:{type:'voice_note',media:'https://example.com/voice.ogg'},
+    caption:{text:'Mensagem de voz'}
+  }])
+});
+
 test('reversed ordered lists preserve descending values',()=>{
   const model={type:'doc',content:[{type:'ordered_list',attrs:{order:3,style:'1',reversed:true},content:[
     {type:'list_item',attrs:{checked:null,value:null,style:''},content:[{type:'paragraph',content:[text('A')]}]},

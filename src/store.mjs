@@ -72,7 +72,7 @@ export class Store{
       pruneSends:this.db.prepare('DELETE FROM sends WHERE created_at<?')
     }
   }
-  health(){try{const row=this.db.prepare('PRAGMA quick_check').get(),value=String(row?.quick_check||Object.values(row||{})[0]||'');return{driver:'sqlite',persistent:this.persistent,ok:value==='ok'}}catch{return{driver:'sqlite',persistent:this.persistent,ok:false}}}
+  health(){try{const row=this.db.prepare('SELECT 1 AS ok').get();return{driver:'sqlite',persistent:this.persistent,ok:Number(row?.ok)===1}}catch{return{driver:'sqlite',persistent:this.persistent,ok:false}}}
   close(){this.db.close()}
   prune(now=Date.now()){
     this.q.pruneTransfers.run(now,now-3600_000);

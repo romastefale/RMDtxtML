@@ -44,7 +44,7 @@ function dirty(){sendRequestId='';if(doc?.source)doc.source.edited=true;platform
 const core=new RMD.Editor(ed,{change:dirty});RMD.editor=core;
 const menuIcons={
   ul:'list',ol:'list',task:'list',quote:'quote',expandable:'quote',pullquote:'quote',details:'file',pre:'code',divider:'text',table:'table',
-  math:'text',mathblock:'text',image:'media',video:'media',audio:'media',document:'file',map:'media',collage:'media',slideshow:'media',
+  math:'text',mathblock:'text',image:'media',video:'media',audio:'media',voice:'media',document:'file',map:'media',collage:'media',slideshow:'media',
   reference:'file',anchor:'link',time:'text',emoji:'media',button:'button',rtl:'settings',entities:'settings',
   export:'file',exporthtml:'code',import:'file',revision:'file',reset:'settings'
 };
@@ -147,6 +147,7 @@ const actions={
   image:()=>{const src=promptHttp('URL HTTPS da imagem'),caption=src?prompt('Legenda (opcional)','Imagem'):null;if(src)insertSpec({type:'image',attrs:{src,alt:'Imagem',spoiler:false},...(caption?{content:[textSpec(caption)]}:{})})},
   video:()=>{const src=promptHttp('URL HTTPS do vídeo'),caption=src?prompt('Legenda (opcional)','Vídeo'):null;if(src)insertSpec({type:'video',attrs:{src,alt:'',spoiler:false},...(caption?{content:[textSpec(caption)]}:{})})},
   audio:()=>{const src=promptHttp('URL HTTPS do áudio'),caption=src?prompt('Legenda (opcional)','Áudio'):null;if(src)insertSpec({type:'audio',attrs:{src,alt:'',spoiler:false},...(caption?{content:[textSpec(caption)]}:{})})},
+  voice:()=>{const src=promptHttp('URL HTTPS da voz (.ogg/.opus)'),caption=src?prompt('Legenda (opcional)','Voz'):null;if(src&&!/\.(?:ogg|oga|opus)(?:[?#]|$)/i.test(src))return say('Use uma URL de voz .ogg, .oga ou .opus');if(src)insertSpec({type:'voice_note',attrs:{src,alt:'',spoiler:false},...(caption?{content:[textSpec(caption)]}:{})})},
   document:()=>{const src=promptHttp('URL HTTPS do documento'),caption=src?prompt('Legenda (opcional)','Documento'):null;if(src)insertSpec({type:'document',attrs:{src},...(caption?{content:[textSpec(caption)]}:{})})},
   map:()=>{const lat=Number(prompt('Latitude','-23.5505')),long=Number(prompt('Longitude','-46.6333')),zoom=Math.max(0,Math.min(24,+prompt('Zoom (0–24)','14')||14)),caption=prompt('Legenda (opcional)','Localização');if(Number.isFinite(lat)&&Number.isFinite(long))insertSpec({type:'map',attrs:{lat,long,zoom,width:0,height:0},...(caption?{content:[textSpec(caption)]}:{})})},
   collage:()=>{const a=promptHttp('Primeira imagem'),b=promptHttp('Segunda imagem');if(a&&b)insertSpec({type:'collage',attrs:{items:[{type:'image',src:a,alt:'Imagem 1',spoiler:false},{type:'image',src:b,alt:'Imagem 2',spoiler:false}]},content:[textSpec('Collage')]})},

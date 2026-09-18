@@ -174,6 +174,19 @@ test('media semantic model is stable across Rich HTML projection and reparse',as
   expect((result.html.match(/<figcaption>/g)||[]).length).toBe(3)
 });
 
+test('voice note is preserved semantically and rendered as Telegram voice_note',async({page})=>{
+  await web(page);
+  const model={type:'doc',content:[{type:'voice_note',attrs:{src:'https://example.com/voice.ogg',alt:'',spoiler:false},content:[{type:'text',text:'Mensagem de voz'}]}]};
+  const result=await page.evaluate(input=>{
+    RMD.editor.setModel(input,{history:false});
+    const html=RMD.editor.html(),reparsed=RMD.editor.parseHtml(html),rendered=RMD.editor.render();
+    return{html,reparsed,rendered}
+  },model);
+  expect(result.reparsed).toEqual(model);
+  expect(result.html).toContain('<audio src="https://example.com/voice.ogg"');
+  expect(result.rendered.richMessage.blocks[0]).toMatchObject({type:'voice_note',voice_note:{type:'voice_note',media:'https://example.com/voice.ogg'}})
+});
+
 test('paste sanitization removes executable markup',async({page})=>{
   await web(page);await setEditor(page,'<p>Base</p>');await page.locator('#editor').click();
   await page.locator('#editor').evaluate(el=>{
