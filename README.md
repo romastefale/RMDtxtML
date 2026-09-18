@@ -4,7 +4,7 @@ RMDtxtML é um editor Web + Telegram Mini App para criar, visualizar, transferir
 
 ## Estado
 
-A linha atual é **1.1.0-rc.1**. O núcleo documental foi migrado para um modelo semântico ProseMirror; Rich HTML deixou de ser a fonte de verdade do documento e passou a ser uma representação de importação/publicação.
+A versão de produção é **1.1.0**. O núcleo documental foi migrado para um modelo semântico ProseMirror; Rich HTML deixou de ser a fonte de verdade do documento e passou a ser uma representação de importação/publicação.
 
 ## Arquitetura do documento
 

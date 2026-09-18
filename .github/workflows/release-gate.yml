@@ -1,7 +1,7 @@
 name: Release Gate
 on:
   push:
-    branches: [draft]
+    branches: [draft, main]
   workflow_dispatch:
 jobs:
   docker:
