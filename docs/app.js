@@ -12,7 +12,7 @@ const themeQuery=matchMedia('(prefers-color-scheme: dark)');
 let rtl=false;
 let skipEntityDetection=false;
 const store=new RMD.DocumentStore();
-let doc=null,saveTimer=0;
+let doc=null,saveTimer=0,sendRequestId='';
 
 const ALIASES={B:'STRONG',I:'EM',INS:'U',STRIKE:'S',DEL:'S'};
 const TAGS=new Set('A B STRONG I EM U INS S STRIKE DEL CODE PRE MARK SUB SUP TG-SPOILER TG-REFERENCE TG-EMOJI TG-TIME TG-MATH H1 H2 H3 H4 H5 H6 P FOOTER HR UL OL LI INPUT BR BLOCKQUOTE CITE ASIDE IMG VIDEO AUDIO TG-DOCUMENT FIGURE FIGCAPTION TG-MAP TG-COLLAGE TG-SLIDESHOW TABLE CAPTION THEAD TBODY TR TH TD DETAILS SUMMARY TG-MATH-BLOCK TG-BUTTON TG-BUTTON-ROW'.split(' '));
@@ -97,7 +97,7 @@ function schedulePersist(){
   clearTimeout(saveTimer);
   saveTimer=setTimeout(()=>{persistDocument({label:'Salvo automaticamente'}).catch(()=>updateStatus('Falha ao salvar'))},700)
 }
-function dirty(){updateStatus('Não salvo');if(doc)schedulePersist()}
+function dirty(){sendRequestId='';updateStatus('Não salvo');if(doc)schedulePersist()}
 const core=new RMD.Editor(ed,{change:dirty});
 function insertHtml(html){core.insert(html)}
 function addBlock(html){core.blockHtml(html)}
@@ -183,11 +183,12 @@ $('#send').onclick=async()=>{
   const defaultTarget=platform.userId();
   const chatId=prompt('Destino (ID do chat)',defaultTarget);
   if(!chatId)return;
+  if(!sendRequestId)sendRequestId=crypto.randomUUID?.()||('send-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
   status.textContent='Enviando…';
   try{
-    const result=await platform.json('/api/send',{method:'POST',auth:true,body:{chatId,html:m.html,isRtl:rtl,skipEntityDetection}});
-    updateStatus('Enviado');say('Rich Message enviada');tg?.HapticFeedback?.notificationOccurred?.('success');
-  }catch(error){updateStatus('Falha');say(error instanceof Error?error.message:'Falha no envio');tg?.HapticFeedback?.notificationOccurred?.('error')}
+    await platform.json('/api/send',{method:'POST',auth:true,body:{requestId:sendRequestId,chatId,html:m.html,isRtl:rtl,skipEntityDetection}});
+    sendRequestId='';updateStatus('Enviado');say('Rich Message enviada');tg?.HapticFeedback?.notificationOccurred?.('success');
+  }catch(error){updateStatus(error?.info?.uncertain?'Resultado indeterminado':'Falha');say(error instanceof Error?error.message:'Falha no envio');tg?.HapticFeedback?.notificationOccurred?.('error')}
 };
 
 function applyOptions(){
