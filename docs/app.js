@@ -1,6 +1,5 @@
-const tg=window.Telegram?.WebApp;
-tg?.ready();
-tg?.expand();
+const platform=RMD.platform,tg=platform.tg;
+platform.boot();
 
 const $=s=>document.querySelector(s);
 const $$=s=>[...document.querySelectorAll(s)];
@@ -28,7 +27,7 @@ const ATTRS={
 const BLOCK_SELECTOR='h1,h2,h3,h4,h5,h6,p,footer,pre,ul,ol,blockquote,aside,figure,tg-map,tg-collage,tg-slideshow,table,details,tg-math-block,tg-button-row,hr';
 const BOOL_ATTRS=new Set(['checked','reversed','expandable','tg-spoiler','bordered','striped','compact','open','request-write-access','allow-user-chats','allow-bot-chats','allow-group-chats','allow-channel-chats']);
 
-function syncTheme(){const inside=!!tg?.initData,dark=inside&&tg.colorScheme?tg.colorScheme==='dark':themeQuery.matches;document.documentElement.dataset.theme=dark?'dark':'light';document.documentElement.style.colorScheme=dark?'dark':'light';if(inside){tg.setHeaderColor?.('bg_color');tg.setBackgroundColor?.('bg_color');tg.setBottomBarColor?.('bottom_bar_bg_color')}}
+function syncTheme(){const inside=platform.isTelegram(),dark=inside&&tg?.colorScheme?tg.colorScheme==='dark':themeQuery.matches;document.documentElement.dataset.theme=dark?'dark':'light';document.documentElement.style.colorScheme=dark?'dark':'light';if(inside){tg.setHeaderColor?.('bg_color');tg.setBackgroundColor?.('bg_color');tg.setBottomBarColor?.('bottom_bar_bg_color')}}
 function say(message){toast.textContent=message;toast.classList.add('show');clearTimeout(say.t);say.t=setTimeout(()=>toast.classList.remove('show'),2200)}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function validHref(v){return /^(#|https?:|mailto:|tel:|tg:\/\/user\?id=)/i.test(v)}
@@ -104,7 +103,6 @@ function insertHtml(html){core.insert(html)}
 function addBlock(html){core.blockHtml(html)}
 function wrap(tag,attrs={}){if(!core.format(tag,attrs))say('Selecione um trecho primeiro')}
 function run(command){const map={bold:'strong',italic:'em',underline:'u',strikeThrough:'s'};if(map[command])return wrap(map[command]);if(command==='undo')return core.undo();if(command==='redo')return core.redo()}
-function apiBase(){const custom=localStorage.getItem('rmdtxtml-api-v1');if(custom)return custom.replace(/\/+$/,'');if(/^https?:$/.test(location.protocol)&&location.hostname!=='romastefale.github.io')return location.origin;return 'https://rmdtxtml.up.railway.app'}
 function promptHttp(label,initial='https://'){const v=prompt(label,initial);if(v===null)return null;if(!/^https?:\/\//i.test(v)){say('Use uma URL HTTP ou HTTPS');return null}return v}
 function safeName(value){return String(value||'').trim().replace(/[^A-Za-z0-9_-]/g,'-').replace(/-+/g,'-').slice(0,64)}
 
@@ -151,7 +149,7 @@ const actions={
   import:()=>$('#file').click(),
   revision:async()=>{if(!doc?.revisions?.length)return say('Nenhuma revisão salva');const list=doc.revisions.slice(-10).reverse(),choice=prompt('Revisão para restaurar:\n'+list.map(r=>r.revision+' · '+new Date(r.at).toLocaleString('pt-BR')).join('\n'),String(list[0].revision));if(choice===null)return;const rev=Number(choice);if(!Number.isSafeInteger(rev))return say('Revisão inválida');try{doc=await store.restore(doc,rev,{sanitize:sanitizeRichHtml});rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;core.setHtml(doc.content.html);applyOptions();updateStatus('Revisão restaurada');say('Revisão restaurada')}catch{say('Revisão não encontrada')}},
   reset:async()=>{if(confirm('Apagar o documento atual e iniciar um documento vazio?')){doc=await store.reset({html:'<p><br></p>',sanitize:sanitizeRichHtml});rtl=false;skipEntityDetection=false;core.setHtml(doc.content.html);applyOptions();updateStatus('Novo documento')}} ,
-  server:()=>{const old=apiBase(),u=prompt('URL HTTPS do backend',old);if(u!==null&&/^https:\/\//i.test(u)){localStorage.setItem('rmdtxtml-api-v1',u.replace(/\/+$/,''));say('Servidor salvo')}}
+  server:()=>{const old=platform.api(),u=prompt('URL HTTPS do backend',old);if(u!==null&&/^https:\/\//i.test(u)){localStorage.setItem('rmdtxtml-api-v1',u.replace(/\/+$/,''));say('Servidor salvo')}}
 };
 $('[data-action]').forEach(b=>b.onclick=()=>{drawer.classList.remove('open');if(b.dataset.action==='mark')return wrap('mark');actions[b.dataset.action]?.()});
 
@@ -181,16 +179,13 @@ $('#send').onclick=async()=>{
   const m=metrics();
   if(!m.html)return say('Escreva algum conteúdo');
   if(m.text>MAX_TEXT)return say('A mensagem excede 32.768 caracteres');
-  if(!tg?.initData)return say('Abra o RMDtxtML pelo Telegram para enviar');
-  const defaultTarget=String(tg.initDataUnsafe?.user?.id||'');
+  if(!platform.isTelegram())return say('Abra o RMDtxtML pelo Telegram para enviar');
+  const defaultTarget=platform.userId();
   const chatId=prompt('Destino (ID do chat)',defaultTarget);
   if(!chatId)return;
-  const api=apiBase();
   status.textContent='Enviando…';
   try{
-    const response=await fetch(api+'/api/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({initData:tg.initData,chatId,html:m.html,isRtl:rtl,skipEntityDetection})});
-    const result=await response.json().catch(()=>({ok:false,error:`HTTP ${response.status}`}));
-    if(!response.ok||!result.ok)throw new Error(result.error||`HTTP ${response.status}`);
+    const result=await platform.json('/api/send',{method:'POST',auth:true,body:{chatId,html:m.html,isRtl:rtl,skipEntityDetection}});
     updateStatus('Enviado');say('Rich Message enviada');tg?.HapticFeedback?.notificationOccurred?.('success');
   }catch(error){updateStatus('Falha');say(error instanceof Error?error.message:'Falha no envio');tg?.HapticFeedback?.notificationOccurred?.('error')}
 };
