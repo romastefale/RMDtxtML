@@ -33,7 +33,8 @@ async function openTelegram(){
       html:m.html,
       isRtl:rtl,
       skipEntityDetection,
-      document:{id:doc?.id||'',revision:doc?.meta?.revision||0}
+      document:{id:doc?.id||'',revision:doc?.meta?.revision||0},
+      semantic:{schema:RMD.DOCUMENT_SCHEMA,format:'semantic',model:core.model()}
     }});
     await persistDocument({label:'Salvo automaticamente'});
     location.assign(result.telegramUrl);updateStatus('Abrindo Telegram')
