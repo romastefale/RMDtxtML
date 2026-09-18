@@ -99,6 +99,16 @@ function schedulePersist(){
 }
 function dirty(){sendRequestId='';platform.dirty(true);document.documentElement.dataset.dirty='true';updateStatus('Não salvo');queueMicrotask(syncEditorUi);if(doc)schedulePersist()}
 const core=new RMD.Editor(ed,{change:dirty});
+const menuIcons={
+  ul:'list',ol:'list',task:'list',quote:'quote',expandable:'quote',pullquote:'quote',details:'file',pre:'code',divider:'text',table:'table',
+  math:'text',mathblock:'text',image:'media',video:'media',audio:'media',document:'file',map:'media',collage:'media',slideshow:'media',
+  reference:'file',anchor:'link',time:'text',emoji:'media',button:'button',rtl:'settings',entities:'settings',
+  export:'file',exporthtml:'code',import:'file',revision:'file',server:'settings',reset:'settings'
+};
+for(const b of $('[data-action]')){
+  const id=menuIcons[b.dataset.action];if(id&&!b.querySelector('svg'))b.insertAdjacentHTML('afterbegin',`<svg class="menuIcon" aria-hidden="true"><use href="#i-${id}"/></svg>`)
+}
+for(const b of $('button[title]:not([aria-label])'))b.setAttribute('aria-label',b.title);
 function insertHtml(html){core.insert(html)}
 function addBlock(html){core.blockHtml(html)}
 function wrap(tag,attrs={}){if(!core.format(tag,attrs))say('Selecione um trecho primeiro')}
