@@ -18,7 +18,7 @@ function syncTheme(){const dark=platform.isTelegram()?platform.colorScheme()==='
 function say(message){toast.textContent=message;toast.classList.add('show');clearTimeout(say.t);say.t=setTimeout(()=>toast.classList.remove('show'),2200)}
 function validHref(v){return /^(#|https?:|mailto:|tel:|tg:\/\/user\?id=)/i.test(v)}
 function currentHtml(){return core.html()}
-function metrics(){const s=core.stats();return{html:currentHtml(),text:s.text,blocks:s.blocks}}
+function metrics(){const s=core.stats();return{html:currentHtml(),text:s.text,blocks:s.blocks,empty:s.empty}}
 function updateStatus(prefix=''){const m=metrics();status.textContent=`${prefix?prefix+' · ':''}${m.text.toLocaleString('pt-BR')}/${MAX_TEXT.toLocaleString('pt-BR')} caracteres · ${m.blocks} blocos`;status.classList.toggle('danger',m.text>MAX_TEXT)}
 function syncDoc(){
   if(!doc)return null;
@@ -198,7 +198,7 @@ $('#back').onclick=()=>platform.close();
 async function sendMessage(){
   await RMD.ready;
   const m=metrics();
-  if(!m.html)return say('Escreva algum conteúdo');
+  if(m.empty)return say('Escreva ou adicione algum conteúdo');
   if(m.text>MAX_TEXT)return say('A mensagem excede 32.768 caracteres');
   if(!platform.isTelegram())return say('Abra o RMDtxtML pelo Telegram para enviar');
   if(!destinationId)return say('Nenhum destino autorizado disponível');
