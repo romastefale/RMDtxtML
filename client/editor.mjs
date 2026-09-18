@@ -77,8 +77,7 @@ const nodes={
   list_item:{
     attrs:{checked:{default:null}},content:'paragraph block*',defining:true,
     parseDOM:[{tag:'li',getAttrs:el=>{const box=el.querySelector(':scope > input[type="checkbox"]');return{checked:box?box.checked:null}}}],
-    toDOM:node=>node.attrs.checked===null?['li',0]:['li',{'data-task':node.attrs.checked?'done':'open'},
-      ['input',{type:'checkbox',contenteditable:'false',...(node.attrs.checked?{checked:'checked'}:{})}],0]
+    toDOM:node=>node.attrs.checked===null?['li',0]:['li',{'data-task':node.attrs.checked?'done':'open'},0]
   },
   math_inline:{
     inline:true,group:'inline',atom:true,attrs:{expression:{default:''}},
@@ -181,7 +180,12 @@ function normalizeModel(json){
 }
 function toHtml(json){
   const node=schema.nodeFromJSON(normalizeModel(json)),frag=DOMSerializer.fromSchema(schema).serializeFragment(node.content);
-  const box=document.createElement('div');box.append(frag);return box.innerHTML
+  const box=document.createElement('div');box.append(frag);
+  for(const li of box.querySelectorAll('li[data-task]')){
+    const checked=li.getAttribute('data-task')==='done',input=document.createElement('input');
+    input.setAttribute('type','checkbox');if(checked)input.setAttribute('checked','');li.removeAttribute('data-task');li.prepend(input)
+  }
+  return box.innerHTML
 }
 function nodeText(node){
   let text=node.textContent||'';
@@ -196,6 +200,31 @@ function nodeText(node){
     if(child.type.name==='button_row')for(const b of child.attrs.buttons||[])text+=b.label||'';
   });
   return text
+}
+
+function taskListItemView(node,view,getPos){
+  const dom=document.createElement('li');
+  if(node.attrs.checked===null)return{dom,contentDOM:dom};
+  dom.className='rmd-task-item';dom.dataset.checked=node.attrs.checked?'true':'false';
+  const input=document.createElement('input'),contentDOM=document.createElement('div');
+  input.type='checkbox';input.checked=node.attrs.checked===true;input.contentEditable='false';input.className='rmd-task-checkbox';
+  contentDOM.className='rmd-task-content';dom.append(input,contentDOM);
+  const commit=()=>{
+    if(typeof getPos!=='function')return;
+    const pos=getPos(),current=view.state.doc.nodeAt(pos);
+    if(!current||current.type!==schema.nodes.list_item)return;
+    view.dispatch(view.state.tr.setNodeMarkup(pos,undefined,{...current.attrs,checked:input.checked}));view.focus()
+  };
+  input.addEventListener('change',commit);
+  return{
+    dom,contentDOM,
+    update(next){
+      if(next.type!==schema.nodes.list_item||next.attrs.checked===null)return false;
+      input.checked=next.attrs.checked===true;dom.dataset.checked=next.attrs.checked?'true':'false';return true
+    },
+    stopEvent:event=>event.target===input,
+    destroy:()=>input.removeEventListener('change',commit)
+  }
 }
 
 class Editor{
@@ -217,10 +246,7 @@ class Editor{
       state:EditorState.create({doc:initial,plugins:this.plugins}),
       dispatchTransaction:tr=>{const state=this.view.state.apply(tr);this.view.updateState(state);if(tr.docChanged)this.change()},
       transformPastedHTML:html=>toHtml(parseHtml(html)),
-      handleClickOn:(view,_pos,node,nodePos,event)=>{
-        if(node.type!==schema.nodes.list_item||node.attrs.checked===null||event.target?.tagName!=='INPUT')return false;
-        event.preventDefault();view.dispatch(view.state.tr.setNodeMarkup(nodePos,undefined,{...node.attrs,checked:!node.attrs.checked}));view.focus();return true
-      }
+      nodeViews:{list_item:taskListItemView}
     });
   }
   model(){return this.view.state.doc.toJSON()}
