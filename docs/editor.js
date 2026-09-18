@@ -154,6 +154,15 @@ class Editor{
       for(const old of nodes){if(['UL','OL'].includes(old.tagName)){for(const li of [...old.children])list.append(li);old.remove();continue}const li=document.createElement('li');while(old.firstChild)li.append(old.firstChild);list.append(li);old.remove()}
     });return true
   }
+  clear(){
+    this.commit();this.restore();const r=this.range();if(!r||r.collapsed)return false;
+    const frag=r.extractContents();
+    for(const tag of [...INLINE])for(const el of [...frag.querySelectorAll(tag.toLowerCase())].reverse())unwrap(el);
+    for(const el of [...frag.children])if(INLINE.has(el.tagName))unwrap(el);
+    const first=frag.firstChild,last=frag.lastChild;if(!first)return false;
+    r.insertNode(frag);const next=document.createRange();next.setStartBefore(first);next.setEndAfter(last);this.select(next);
+    this.normalize();this.record();this.change();this.root.focus({preventScroll:true});return true
+  }
   undo(){
     this.commit();if(this.past.length<2)return false;const current=this.past.pop();this.future.push(current);this.apply(this.past.at(-1));return true
   }
