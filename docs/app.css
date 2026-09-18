@@ -184,7 +184,11 @@ tg-button-row[align="right"]{justify-content:flex-end}
   border-radius:var(--radius);overflow:hidden;background:var(--hairline);gap:1px
 }
 .grid button{
-  background:var(--bg);border-radius:0;text-align:left;padding:11px 12px;min-height:58px
+  position:relative;background:var(--bg);border-radius:0;text-align:left;padding:11px 12px 11px 42px;min-height:62px
+}
+.grid button[aria-pressed="true"]{background:var(--softAccent);color:var(--accent)}
+.grid .menuIcon{
+  position:absolute;left:12px;top:13px;width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round
 }
 .grid b{display:block;font-size:13px;font-weight:620}
 .grid small{display:block;margin-top:2px;color:var(--muted);font-size:11px;line-height:1.3}
