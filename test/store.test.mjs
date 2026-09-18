@@ -82,9 +82,9 @@ test('SQLite rate window increments and resets',()=>{
 test('send idempotency persists terminal result',()=>{
   const store=new Store({env:{},dbPath:':memory:'});
   try{
-    assert.equal(store.beginSend('42','request-send-0001',{now:1000}),true);
-    assert.equal(store.beginSend('42','request-send-0001',{now:1001}),false);
-    assert.equal(store.sendState('42','request-send-0001').state,'pending');
+    assert.equal(store.beginSend('42','request-send-0001','hash-a',{now:1000}),true);
+    assert.equal(store.beginSend('42','request-send-0001','hash-a',{now:1001}),false);
+    const pending=store.sendState('42','request-send-0001');assert.equal(pending.state,'pending');assert.equal(pending.payloadHash,'hash-a');
     store.completeSend('42','request-send-0001',{message_id:7},{now:1100});
     const state=store.sendState('42','request-send-0001');
     assert.equal(state.state,'done');assert.deepEqual(state.response,{message_id:7})
@@ -121,4 +121,37 @@ test('stale pending send becomes uncertain and old send records are pruned',()=>
     store.prune(1000+8*86400_000);
     assert.equal(store.sendState('42','request-send-stale'),null)
   }finally{store.close()}
+});
+
+
+test('SQLite migrates payload_hash for send idempotency and reports healthy storage',()=>{
+  const dir=mkdtempSync(path.join(os.tmpdir(),'rmdtxtml-send-migrate-')),dbPath=path.join(dir,'state.sqlite');
+  try{
+    const legacy=new DatabaseSync(dbPath);
+    legacy.exec(`
+      CREATE TABLE transfers(token TEXT PRIMARY KEY,html TEXT NOT NULL,is_rtl INTEGER NOT NULL DEFAULT 0,skip_entities INTEGER NOT NULL DEFAULT 0,document_json TEXT,semantic_json TEXT,created_at INTEGER NOT NULL,expires_at INTEGER NOT NULL,claimed_at INTEGER);
+      CREATE TABLE rates(bucket TEXT PRIMARY KEY,count INTEGER NOT NULL,resets_at INTEGER NOT NULL);
+      CREATE TABLE sends(user_id TEXT NOT NULL,request_id TEXT NOT NULL,state TEXT NOT NULL,response_json TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,PRIMARY KEY(user_id,request_id));
+    `);
+    legacy.close();
+    const store=new Store({env:{},dbPath});
+    try{
+      const columns=store.db.prepare('PRAGMA table_info(sends)').all().map(x=>x.name);
+      assert.ok(columns.includes('payload_hash'));assert.equal(store.health().ok,true);
+      assert.equal(store.beginSend('42','request-fingerprint','abc123'),true);
+      assert.equal(store.sendState('42','request-fingerprint').payloadHash,'abc123')
+    }finally{store.close()}
+  }finally{rmSync(dir,{recursive:true,force:true})}
+});
+
+test('two SQLite connections cannot claim the same transfer twice',()=>{
+  const dir=mkdtempSync(path.join(os.tmpdir(),'rmdtxtml-claim-')),dbPath=path.join(dir,'state.sqlite'),token='z'.repeat(32);
+  try{
+    const first=new Store({env:{},dbPath}),second=new Store({env:{},dbPath});
+    try{
+      first.createTransfer({token,html:'<p>x</p>',expiresAt:Date.now()+60_000});
+      assert.equal(first.claimTransfer(token)?.html,'<p>x</p>');
+      assert.equal(second.claimTransfer(token),null)
+    }finally{first.close();second.close()}
+  }finally{rmSync(dir,{recursive:true,force:true})}
 });

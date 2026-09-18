@@ -38,16 +38,22 @@ test('telegramCall keeps malformed or transport responses uncertain',async()=>{
 });
 
 
-test('opaque destinations never expose configured chat ids to the client',()=>{
-  const validated={user:{id:42}},env={SEND_SCOPE:'self',ALLOWED_CHAT_IDS:'-100123'};
+test('destination scope and ACL never expose or authorize another user chat',()=>{
+  const validated={user:{id:42}};
+  const env={SEND_SCOPE:'all',AUTHORIZED_DESTINATIONS:JSON.stringify([
+    {chat_id:'-100123',label:'Equipe',user_ids:[42]},
+    {chat_id:'-100999',label:'Outro',user_ids:[99]},
+    {chat_id:'-100777',label:'Público',public:true}
+  ])};
   const publicList=publicDestinations(validated,env,token);
-  assert.equal(publicList.some(x=>Object.values(x).includes('-100123')),false);
-  assert.deepEqual(publicList[0],{id:'self',label:'Minhas mensagens'});
-  const opaque=destinationId('-100123',token);
-  assert.match(opaque,/^d_[A-Za-z0-9_-]{22}$/);
-  assert.equal(resolveDestination(opaque,validated,env,token),'-100123');
-  assert.equal(resolveDestination('d_invalid',validated,env,token),null);
-  assert.equal(authorizedDestinations(validated,env,token).length,2)
+  assert.equal(publicList.some(x=>Object.values(x).some(v=>String(v).startsWith('-100'))),false);
+  assert.deepEqual(publicList.map(x=>x.label),['Minhas mensagens','Equipe','Público']);
+  const allowed=destinationId('-100123',token),denied=destinationId('-100999',token);
+  assert.equal(resolveDestination(allowed,validated,env,token),'-100123');
+  assert.equal(resolveDestination(denied,validated,env,token),null);
+  assert.equal(authorizedDestinations(validated,{...env,SEND_SCOPE:'self'},token).length,1);
+  assert.equal(authorizedDestinations(validated,{SEND_SCOPE:'configured',ALLOWED_CHAT_IDS:'-100555'},token).length,0);
+  assert.equal(authorizedDestinations(validated,{SEND_SCOPE:'configured',ALLOWED_CHAT_IDS:'-100555',ALLOW_GLOBAL_DESTINATIONS:'true'},token).length,1)
 });
 
 test('telegramCall applies a bounded transport signal',async()=>{

@@ -4,19 +4,30 @@ export function signInitData(fields,botToken){const params=new URLSearchParams()
 export function validateInitData(initData,botToken,{maxAgeSeconds=86400,now=Date.now()}={}){if(!initData||!botToken)return{ok:false,error:'missing_init_data'};const params=new URLSearchParams(initData);const receivedHash=params.get('hash');if(!receivedHash||!/^[a-f0-9]{64}$/i.test(receivedHash))return{ok:false,error:'invalid_hash'};const authDate=Number(params.get('auth_date')||0),nowSeconds=Math.floor(now/1000);if(!Number.isSafeInteger(authDate)||authDate<=0||authDate>nowSeconds+30)return{ok:false,error:'invalid_auth_date'};if(nowSeconds-authDate>maxAgeSeconds)return{ok:false,error:'expired'};params.delete('hash');const dataCheck=[...params.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${k}=${v}`).join('\n');const secret=crypto.createHmac('sha256','WebAppData').update(botToken).digest();const expected=crypto.createHmac('sha256',secret).update(dataCheck).digest('hex');const a=Buffer.from(receivedHash,'hex'),b=Buffer.from(expected,'hex');if(a.length!==b.length||!crypto.timingSafeEqual(a,b))return{ok:false,error:'signature_mismatch'};let user=null;const rawUser=params.get('user');if(rawUser){try{user=JSON.parse(rawUser)}catch{return{ok:false,error:'invalid_user'}}}return{ok:true,authDate,user,params}}
 
 export function destinationId(chatId,secret){return'd_'+crypto.createHmac('sha256',secret).update('rmdtxtml:destination:'+String(chatId)).digest('base64url').slice(0,22)}
+function enabled(value){return /^(1|true|yes|on)$/i.test(String(value||''))}
+function destinationAllowed(item,userId,{allowGlobal=false}={}){
+  const acl=item?.user_ids??item?.users??item?.allow_user_ids;
+  if(item?.public===true||acl==='*')return true;
+  if(Array.isArray(acl))return acl.map(String).includes(String(userId));
+  if(typeof acl==='string'&&acl.trim())return acl.split(',').map(x=>x.trim()).filter(Boolean).includes(String(userId));
+  return allowGlobal
+}
 export function authorizedDestinations(validated,env=process.env,secret=''){
-  const out=[],seen=new Set(),scope=(env.SEND_SCOPE||'self').toLowerCase(),userId=validated?.user?.id;
-  if(userId!==undefined&&userId!==null&&scope!=='none'){
+  const out=[],seen=new Set(),requested=String(env.SEND_SCOPE||'self').toLowerCase(),scope=['none','self','configured','all'].includes(requested)?requested:'self',userId=validated?.user?.id;
+  if(userId!==undefined&&userId!==null&&(scope==='self'||scope==='all')){
     const chatId=String(userId);out.push({id:'self',label:'Minhas mensagens',chatId});seen.add(chatId)
   }
+  if(userId===undefined||userId===null||!(scope==='configured'||scope==='all'))return out;
+  const allowGlobal=enabled(env.ALLOW_GLOBAL_DESTINATIONS);
   let configured=[];
   try{const parsed=JSON.parse(env.AUTHORIZED_DESTINATIONS||'[]');if(Array.isArray(parsed))configured=parsed}catch{}
   for(const item of configured){
+    if(!destinationAllowed(item,userId,{allowGlobal}))continue;
     const chatId=String(item?.chat_id??item?.chatId??'').trim();if(!chatId||seen.has(chatId))continue;
     const label=String(item?.label||item?.name||'Destino autorizado').trim().slice(0,80)||'Destino autorizado';
     out.push({id:destinationId(chatId,secret),label,chatId});seen.add(chatId)
   }
-  for(const raw of String(env.ALLOWED_CHAT_IDS||'').split(',')){
+  if(allowGlobal)for(const raw of String(env.ALLOWED_CHAT_IDS||'').split(',')){
     const chatId=raw.trim();if(!chatId||seen.has(chatId))continue;
     out.push({id:destinationId(chatId,secret),label:'Destino autorizado',chatId});seen.add(chatId)
   }

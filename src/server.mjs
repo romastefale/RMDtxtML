@@ -53,6 +53,8 @@ function transferDocument(input){
   return{id,revision:Number.isSafeInteger(revision)&&revision>=0?revision:0}
 }
 function validRequestId(value){return typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_-]{15,79}$/.test(value)}
+function enabled(value){return /^(1|true|yes|on)$/i.test(String(value||''))}
+function sendFingerprint({chatId,richMessage,disableNotification=false,protectContent=false}){return crypto.createHash('sha256').update(JSON.stringify({chatId:String(chatId),richMessage,disableNotification:Boolean(disableNotification),protectContent:Boolean(protectContent)})).digest('hex')}
 function transferSemantic(input){
   if(input===undefined||input===null)return null;
   if(typeof input!=='object'||input.schema!==2||input.format!=='semantic'||!input.model||typeof input.model!=='object')return false;
@@ -121,17 +123,19 @@ async function send(req,res,{token,env,fetchImpl,headers,data}){
   const legacy=input.richMessage===undefined&&typeof input.html==='string'?{html:input.html,is_rtl:input.isRtl===true,skip_entity_detection:input.skipEntityDetection===true}:input.richMessage;
   const checked=validateRichMessage(legacy);
   if(!checked.ok)return json(res,400,{ok:false,error:`Conteúdo inválido: ${checked.error}`},headers);
-
+  const richMessage=checked.richMessage;
+  const fingerprint=sendFingerprint({chatId,richMessage,disableNotification:input.disableNotification===true,protectContent:input.protectContent===true});
+  data.prune();
   const previous=data.sendState(userId,requestId);
+  if(previous?.payloadHash&&previous.payloadHash!==fingerprint)return json(res,409,{ok:false,error:'requestId já utilizado para outro conteúdo',requestId,conflict:true},headers);
   if(previous?.state==='done')return json(res,200,{ok:true,result:previous.response,idempotent:true},headers);
   if(previous?.state==='pending'||previous?.state==='uncertain')return json(res,409,{ok:false,error:'Este envio já foi iniciado; o resultado anterior ainda é indeterminado',requestId,uncertain:true},headers);
-  if(!data.beginSend(userId,requestId)){
+  if(!data.beginSend(userId,requestId,fingerprint)){
     const current=data.sendState(userId,requestId);
+    if(current?.payloadHash&&current.payloadHash!==fingerprint)return json(res,409,{ok:false,error:'requestId já utilizado para outro conteúdo',requestId,conflict:true},headers);
     if(current?.state==='done')return json(res,200,{ok:true,result:current.response,idempotent:true},headers);
     return json(res,409,{ok:false,error:'Este envio já está em processamento',requestId},headers)
   }
-
-  const richMessage=checked.richMessage;
   try{
     const result=await telegramCall(token,'sendRichMessage',{chat_id:chatId,rich_message:richMessage,disable_notification:input.disableNotification===true,protect_content:input.protectContent===true},{fetchImpl});
     data.completeSend(userId,requestId,result.result);
@@ -153,7 +157,8 @@ async function serveStatic(req,res){
   try{
     const info=await stat(candidate);if(!info.isFile())throw new Error('not_file');
     const data=await readFile(candidate);
-    res.writeHead(200,{'content-type':mime.get(path.extname(candidate))||'application/octet-stream','content-length':data.length,'cache-control':path.extname(candidate)==='.html'?'no-cache':'public, max-age=300','x-content-type-options':'nosniff','referrer-policy':'no-referrer','permissions-policy':'camera=(), microphone=()'});
+    const ext=path.extname(candidate),revalidate=['.html','.js','.css'].includes(ext);
+    res.writeHead(200,{'content-type':mime.get(ext)||'application/octet-stream','content-length':data.length,'cache-control':revalidate?'no-cache':'public, max-age=300','x-content-type-options':'nosniff','referrer-policy':'no-referrer','permissions-policy':'camera=(), microphone=()'});
     res.end(req.method==='HEAD'?undefined:data)
   }catch{
     if(pathname!=='/index.html'&&!path.extname(pathname)){req.url='/index.html';return serveStatic(req,res)}
@@ -167,9 +172,11 @@ export function createServer({botToken=process.env.BOT_TOKEN||'',env=process.env
     try{
       const headers=corsHeaders(req,env);
       if(req.method==='OPTIONS'&&req.url?.startsWith('/api/')){res.writeHead(204,headers);return res.end()}
-      if(req.method==='GET'&&req.url?.startsWith('/api/health')){
+      if(req.method==='GET'&&(req.url?.startsWith('/api/health')||req.url?.startsWith('/api/ready'))){
         data.prune();
-        return json(res,200,{ok:true,version,botConfigured:Boolean(token),sendScope:env.SEND_SCOPE||'self',storage:data.health()},headers)
+        const storage=data.health(),ready=storage.ok&&(!enabled(env.REQUIRE_PERSISTENT_STORAGE)||storage.persistent)&&(!enabled(env.REQUIRE_BOT_READY)||Boolean(token));
+        const body={ok:req.url?.startsWith('/api/ready')?ready:true,ready,version,botConfigured:Boolean(token),sendScope:env.SEND_SCOPE||'self',storage};
+        return json(res,req.url?.startsWith('/api/ready')&&!ready?503:200,body,headers)
       }
       if(req.method==='POST'&&req.url==='/api/bootstrap')return await bootstrap(req,res,{token,env,headers});
       if(req.method==='POST'&&req.url==='/api/transfers')return await createTransfer(req,res,{botToken:token,env,fetchImpl,headers,data});
@@ -186,19 +193,35 @@ export function createServer({botToken=process.env.BOT_TOKEN||'',env=process.env
   return server
 }
 
-if(process.argv[1]===fileURLToPath(import.meta.url)){
+export async function configureTelegramBot({token=process.env.BOT_TOKEN||'',appUrl=process.env.APP_URL||'',fetchImpl=fetch}={}){
+  if(!token)throw new Error('BOT_TOKEN não configurado');
+  if(!/^https:\/\//i.test(appUrl))throw new Error('APP_URL HTTPS não configurada');
+  const me=await telegramCall(token,'getMe',{}, {fetchImpl});
+  botName=String(me?.result?.username||'');
+  if(!botName)throw new Error('Bot sem username');
+  await telegramCall(token,'setChatMenuButton',{menu_button:{type:'web_app',text:'RMDtxtML',web_app:{url:appUrl}}},{fetchImpl});
+  return{username:botName,mainMiniApp:me?.result?.has_main_web_app===true,appUrl}
+}
+
+async function startProduction(){
+  const token=process.env.BOT_TOKEN||'',appUrl=process.env.APP_URL||'',requireBot=enabled(process.env.REQUIRE_BOT_READY);
+  let bot=null;
+  if(token&&/^https:\/\//i.test(appUrl)){
+    try{bot=await configureTelegramBot({token,appUrl})}
+    catch(error){
+      console.error('Could not configure Telegram bot:',error instanceof Error?error.message:error);
+      if(requireBot)throw error
+    }
+  }else if(requireBot)throw new Error('Telegram bot readiness configuration missing');
   const server=createServer();
-  server.listen(port,async()=>{
+  server.listen(port,()=>{
     console.log(`RMDtxtML ${version} http://localhost:${port}`);
-    const token=process.env.BOT_TOKEN||'',appUrl=process.env.APP_URL||'';
-    if(token&&/^https:\/\//i.test(appUrl)){
-      try{
-        const me=await telegramCall(token,'getMe',{});
-        botName=String(me?.result?.username||botName||'');
-        console.log(`Telegram bot ready: ${botName?'@'+botName:'username unavailable'} · mainMiniApp=${me?.result?.has_main_web_app===true?'yes':'no'}`);
-        await telegramCall(token,'setChatMenuButton',{menu_button:{type:'web_app',text:'RMDtxtML',web_app:{url:appUrl}}});
-        console.log(`Telegram menu configured: ${appUrl}`)
-      }catch(error){console.error('Could not configure Telegram bot:',error instanceof Error?error.message:error)}
+    if(bot){
+      console.log(`Telegram bot ready: @${bot.username} · mainMiniApp=${bot.mainMiniApp?'yes':'no'}`);
+      console.log(`Telegram menu configured: ${bot.appUrl}`)
     }
   })
+}
+if(process.argv[1]===fileURLToPath(import.meta.url)){
+  try{await startProduction()}catch(error){console.error('Startup failed:',error instanceof Error?error.message:error);process.exitCode=1}
 }

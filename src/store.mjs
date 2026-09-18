@@ -41,6 +41,7 @@ export class Store{
         request_id TEXT NOT NULL,
         state TEXT NOT NULL,
         response_json TEXT,
+        payload_hash TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         PRIMARY KEY(user_id,request_id)
@@ -49,6 +50,8 @@ export class Store{
     `);
     const transferColumns=new Set(this.db.prepare('PRAGMA table_info(transfers)').all().map(row=>String(row.name)));
     if(!transferColumns.has('semantic_json'))this.db.exec('ALTER TABLE transfers ADD COLUMN semantic_json TEXT');
+    const sendColumns=new Set(this.db.prepare('PRAGMA table_info(sends)').all().map(row=>String(row.name)));
+    if(!sendColumns.has('payload_hash'))this.db.exec('ALTER TABLE sends ADD COLUMN payload_hash TEXT');
     this.q={
       addTransfer:this.db.prepare('INSERT INTO transfers(token,html,is_rtl,skip_entities,document_json,semantic_json,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)'),
       getTransfer:this.db.prepare('SELECT token,html,is_rtl,skip_entities,document_json,semantic_json,created_at,expires_at,claimed_at FROM transfers WHERE token=?'),
@@ -60,8 +63,8 @@ export class Store{
       getRate:this.db.prepare('SELECT count,resets_at FROM rates WHERE bucket=?'),
       putRate:this.db.prepare('INSERT INTO rates(bucket,count,resets_at) VALUES(?,?,?) ON CONFLICT(bucket) DO UPDATE SET count=excluded.count,resets_at=excluded.resets_at'),
       pruneRates:this.db.prepare('DELETE FROM rates WHERE resets_at<=?'),
-      getSend:this.db.prepare('SELECT state,response_json,created_at,updated_at FROM sends WHERE user_id=? AND request_id=?'),
-      beginSend:this.db.prepare("INSERT OR IGNORE INTO sends(user_id,request_id,state,created_at,updated_at) VALUES(?,?,'pending',?,?)"),
+      getSend:this.db.prepare('SELECT state,response_json,payload_hash,created_at,updated_at FROM sends WHERE user_id=? AND request_id=?'),
+      beginSend:this.db.prepare("INSERT OR IGNORE INTO sends(user_id,request_id,state,payload_hash,created_at,updated_at) VALUES(?,?,'pending',?,?,?)"),
       doneSend:this.db.prepare("UPDATE sends SET state='done',response_json=?,updated_at=? WHERE user_id=? AND request_id=?"),
       failSend:this.db.prepare('DELETE FROM sends WHERE user_id=? AND request_id=?'),
       uncertainSend:this.db.prepare("UPDATE sends SET state='uncertain',updated_at=? WHERE user_id=? AND request_id=?"),
@@ -69,7 +72,7 @@ export class Store{
       pruneSends:this.db.prepare('DELETE FROM sends WHERE created_at<?')
     }
   }
-  health(){return{driver:'sqlite',persistent:this.persistent}}
+  health(){try{const row=this.db.prepare('PRAGMA quick_check').get(),value=String(row?.quick_check||Object.values(row||{})[0]||'');return{driver:'sqlite',persistent:this.persistent,ok:value==='ok'}}catch{return{driver:'sqlite',persistent:this.persistent,ok:false}}}
   close(){this.db.close()}
   prune(now=Date.now()){
     this.q.pruneTransfers.run(now,now-3600_000);
@@ -114,10 +117,12 @@ export class Store{
   }
   sendState(userId,requestId){
     const row=this.q.getSend.get(String(userId),String(requestId));
-    return row?{state:row.state,response:row.response_json?parse(row.response_json):null,createdAt:Number(row.created_at),updatedAt:Number(row.updated_at)}:null
+    return row?{state:row.state,response:row.response_json?parse(row.response_json):null,payloadHash:row.payload_hash||'',createdAt:Number(row.created_at),updatedAt:Number(row.updated_at)}:null
   }
-  beginSend(userId,requestId,{now=Date.now()}={}){
-    const result=this.q.beginSend.run(String(userId),String(requestId),now,now);
+  beginSend(userId,requestId,payloadHash='',options={}){
+    if(payloadHash&&typeof payloadHash==='object'){options=payloadHash;payloadHash=''}
+    const{now=Date.now()}=options;
+    const result=this.q.beginSend.run(String(userId),String(requestId),String(payloadHash||''),now,now);
     return Number(result.changes)===1
   }
   completeSend(userId,requestId,response,{now=Date.now()}={}){

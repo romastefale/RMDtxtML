@@ -4,7 +4,7 @@ import {once} from 'node:events';
 import {mkdtempSync,rmSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {createServer} from '../src/server.mjs';
+import {configureTelegramBot,createServer} from '../src/server.mjs';
 import {Store} from '../src/store.mjs';
 import {signInitData} from '../src/telegram.mjs';
 
@@ -23,12 +23,16 @@ async function withServer(fetchImpl,fn,overrides={}){
 function initData(id=42){return signInitData({auth_date:Math.floor(Date.now()/1000),user:JSON.stringify({id,first_name:'Test'})},token)}
 const post=(base,path,body,origin='https://example.com')=>fetch(base+path,{method:'POST',headers:{'content-type':'application/json',...(origin?{origin}:{})},body:JSON.stringify(body)});
 
-test('health endpoint reports storage mode and bot configuration',async()=>{
+test('health and readiness distinguish liveness from production requirements',async()=>{
   await withServer(fetch,async base=>{
     const response=await fetch(base+'/api/health'),body=await response.json();
-    assert.equal(response.status,200);assert.equal(body.ok,true);assert.equal(body.botConfigured,true);
-    assert.equal(body.version,'1.1.0-rc.1');assert.equal(body.storage.driver,'sqlite');assert.equal(body.storage.persistent,false)
-  })
+    assert.equal(response.status,200);assert.equal(body.ok,true);assert.equal(body.ready,true);assert.equal(body.botConfigured,true);
+    assert.equal(body.version,'1.1.0-rc.1');assert.equal(body.storage.driver,'sqlite');assert.equal(body.storage.persistent,false);assert.equal(body.storage.ok,true)
+  });
+  await withServer(fetch,async base=>{
+    const response=await fetch(base+'/api/ready'),body=await response.json();
+    assert.equal(response.status,503);assert.equal(body.ok,false);assert.equal(body.ready,false);assert.equal(body.storage.persistent,false)
+  },{REQUIRE_PERSISTENT_STORAGE:'true',REQUIRE_BOT_READY:'true'})
 });
 
 test('POST /api/bootstrap exposes only opaque authorized destinations',async()=>{
@@ -44,7 +48,8 @@ test('static shell emits release security headers and HEAD has no response body'
     const response=await fetch(base+'/',{method:'HEAD'});
     assert.equal(response.status,200);assert.equal(response.headers.get('referrer-policy'),'no-referrer');
     assert.match(response.headers.get('permissions-policy')||'',/camera=\(\)/);
-    assert.equal(await response.text(),'')
+    assert.equal(response.headers.get('cache-control'),'no-cache');assert.equal(await response.text(),'');
+    const js=await fetch(base+'/app.js');assert.equal(js.headers.get('cache-control'),'no-cache')
   })
 });
 
@@ -202,4 +207,40 @@ test('POST /api/send rejects multiple Rich Message representations',async()=>{
     const response=await post(base,'/api/send',{initData:initData(),requestId:'request-invalid-rich1',destinationId:'self',richMessage:{html:'<p>x</p>',blocks:[{type:'paragraph',text:'x'}]}});
     assert.equal(response.status,400);assert.match((await response.json()).error,/exactly_one_rich_representation_required/)
   })
+});
+
+
+test('same requestId cannot be replayed with a different payload',async()=>{
+  let calls=0;
+  const telegramFetch=async()=>{calls++;return new Response(JSON.stringify({ok:true,result:{message_id:22}}),{status:200,headers:{'content-type':'application/json'}})};
+  await withServer(telegramFetch,async base=>{
+    const first=await post(base,'/api/send',{initData:initData(),requestId:'request-fingerprint-0001',destinationId:'self',html:'<p>Primeiro</p>'});
+    assert.equal(first.status,200);
+    const second=await post(base,'/api/send',{initData:initData(),requestId:'request-fingerprint-0001',destinationId:'self',html:'<p>Outro</p>'}),body=await second.json();
+    assert.equal(second.status,409);assert.equal(body.conflict,true);assert.equal(calls,1)
+  })
+});
+
+test('configured destinations require explicit per-user ACL unless global access is enabled',async()=>{
+  const configured=JSON.stringify([{chat_id:'-100123',label:'Equipe',user_ids:[42]},{chat_id:'-100999',label:'Outro',user_ids:[99]}]);
+  await withServer(fetch,async base=>{
+    const response=await post(base,'/api/bootstrap',{initData:initData(42)}),body=await response.json();
+    assert.equal(response.status,200);assert.deepEqual(body.destinations.map(x=>x.label),['Minhas mensagens','Equipe']);
+    const other=await post(base,'/api/bootstrap',{initData:initData(99)}),otherBody=await other.json();
+    assert.deepEqual(otherBody.destinations.map(x=>x.label),['Minhas mensagens','Outro'])
+  },{SEND_SCOPE:'all',AUTHORIZED_DESTINATIONS:configured})
+});
+
+test('Telegram startup preflight verifies bot identity and menu configuration',async()=>{
+  const calls=[];
+  const fetchImpl=async(url,options)=>{
+    const method=new URL(url).pathname.split('/').at(-1);calls.push({method,body:JSON.parse(options.body)});
+    if(method==='getMe')return new Response(JSON.stringify({ok:true,result:{username:'rmdtxtml_test_bot',has_main_web_app:true}}),{status:200,headers:{'content-type':'application/json'}});
+    if(method==='setChatMenuButton')return new Response(JSON.stringify({ok:true,result:true}),{status:200,headers:{'content-type':'application/json'}});
+    return new Response(JSON.stringify({ok:false,description:'unexpected'}),{status:400,headers:{'content-type':'application/json'}})
+  };
+  const result=await configureTelegramBot({token,appUrl:'https://example.com/',fetchImpl});
+  assert.deepEqual(result,{username:'rmdtxtml_test_bot',mainMiniApp:true,appUrl:'https://example.com/'});
+  assert.deepEqual(calls.map(x=>x.method),['getMe','setChatMenuButton']);
+  assert.equal(calls[1].body.menu_button.web_app.url,'https://example.com/')
 });
