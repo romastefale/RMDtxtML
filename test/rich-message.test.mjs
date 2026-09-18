@@ -37,3 +37,13 @@ test('advanced semantic document renders to Bot API 10.3 blocks without parallel
   assert.equal(b[6].buttons.length,2);assert.equal(b[6].buttons[0].callback_data,'go');assert.deepEqual(b[6].buttons[1].disabled,{});
   assert.equal(rendered.richMessage.skip_entity_detection,true)
 });
+
+test('reversed ordered lists preserve descending values',()=>{
+  const model={type:'doc',content:[{type:'ordered_list',attrs:{order:3,style:'1',reversed:true},content:[
+    {type:'list_item',attrs:{checked:null,value:null,style:''},content:[{type:'paragraph',content:[text('A')]}]},
+    {type:'list_item',attrs:{checked:null,value:null,style:''},content:[{type:'paragraph',content:[text('B')]}]},
+    {type:'list_item',attrs:{checked:null,value:null,style:''},content:[{type:'paragraph',content:[text('C')]}]}
+  ]}]};
+  const list=renderRichMessage(model,{html:'ignored'}).richMessage.blocks[0];
+  assert.deepEqual(list.items.map(item=>item.value),[3,2,1])
+});

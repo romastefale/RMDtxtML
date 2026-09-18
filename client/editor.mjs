@@ -78,7 +78,7 @@ const nodes={
   bullet_list:{content:'list_item+',group:'block',parseDOM:[{tag:'ul'}],toDOM:()=>['ul',0]},
   ordered_list:{
     attrs:{order:{default:1},style:{default:'1'},reversed:{default:false}},content:'list_item+',group:'block',
-    parseDOM:[{tag:'ol',getAttrs:el=>({order:Number(el.getAttribute('start')||1),style:el.getAttribute('type')||'1',reversed:el.hasAttribute('reversed')})}],
+    parseDOM:[{tag:'ol',getAttrs:el=>{const reversed=el.hasAttribute('reversed'),start=el.getAttribute('start');return{order:start!==null?Number(start):reversed?el.querySelectorAll(':scope > li').length:1,style:el.getAttribute('type')||'1',reversed}}}],
     toDOM:node=>['ol',{...(node.attrs.order!==1?{start:node.attrs.order}:{}),...(node.attrs.style!=='1'?{type:node.attrs.style}:{}),...(node.attrs.reversed?{reversed:''}:{})},0]
   },
   list_item:{
@@ -188,7 +188,8 @@ const EMPTY={type:'doc',content:[{type:'paragraph'}]};
 const markMap={strong:'strong',em:'em',u:'underline',s:'strike',code:'code',mark:'marked','tg-spoiler':'spoiler',sub:'sub',sup:'sup',a:'link','tg-reference':'reference'};
 
 function cleanContainer(html){
-  const box=document.createElement('div');box.innerHTML=String(html??'');
+  const source=String(html??'').replace(/<(tg-map|tg-document)(\b[^>]*)\/>/gi,'<$1$2></$1>');
+  const box=document.createElement('div');box.innerHTML=source;
   box.querySelectorAll('script,style,iframe,object,embed,link,meta').forEach(x=>x.remove());
   box.querySelectorAll('*').forEach(el=>[...el.attributes].forEach(a=>{if(a.name.toLowerCase().startsWith('on'))el.removeAttribute(a.name)}));
   return box

@@ -11,7 +11,8 @@ function compatibilityWarnings(source){
   if(/\[\^[^\]]+\]|^\[\^[^\]]+\]:/m.test(source))warnings.push('footnotes_preserved_in_original');
   if(/(^|\s)==[^=\n]+==(\s|$)/m.test(source))warnings.push('highlight_extension_preserved_in_original');
   if(/(^|\s)\|\|[^|\n]+\|\|(\s|$)/m.test(source))warnings.push('spoiler_extension_preserved_in_original');
-  return warnings
+  if(/<\s*(script|iframe|object|embed|style|link|meta)\b|\son[a-z]+\s*=|\b(?:href|src)\s*=\s*["']?\s*javascript:/i.test(source))warnings.push('unsafe_html_removed_from_interpretation');
+  return [...new Set(warnings)]
 }
 export function markdownToHtml(source){
   const text=String(source??'');

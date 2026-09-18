@@ -90,8 +90,17 @@ function inspectBlocks(blocks){
       if(type==='table'){
         if(!Array.isArray(block.cells)||!block.cells.length)throw new Error('invalid_table');
         for(const row of block.cells){
-          if(!Array.isArray(row)||row.length>20)throw new Error('too_many_table_columns');
-          for(const cell of row){text+=richTextCount(cell?.text);if(cell?.colspan!==undefined&&(!Number.isInteger(cell.colspan)||cell.colspan<1||cell.colspan>20))throw new Error('invalid_table_span')}
+          if(!Array.isArray(row)||!row.length)throw new Error('invalid_table');
+          let columns=0;
+          for(const cell of row){
+            text+=richTextCount(cell?.text);
+            const colspan=cell?.colspan===undefined?1:Number(cell.colspan),rowspan=cell?.rowspan===undefined?1:Number(cell.rowspan);
+            if(!Number.isInteger(colspan)||colspan<1||colspan>20||!Number.isInteger(rowspan)||rowspan<1||rowspan>100)throw new Error('invalid_table_span');
+            if(cell?.align!==undefined&&!['left','center','right'].includes(cell.align))throw new Error('invalid_table_align');
+            if(cell?.valign!==undefined&&!['top','middle','bottom'].includes(cell.valign))throw new Error('invalid_table_valign');
+            columns+=colspan
+          }
+          if(columns>20)throw new Error('too_many_table_columns')
         }
       }
       if(type==='map'){
@@ -102,7 +111,22 @@ function inspectBlocks(blocks){
       }
       if(type==='buttons'){
         if(!Array.isArray(block.buttons)||block.buttons.length<1||block.buttons.length>8)throw new Error('invalid_buttons');
-        for(const button of block.buttons){text+=richTextCount(button?.text);const keys=['url','callback_data','web_app','login_url','switch_inline_query','switch_inline_query_current_chat','switch_inline_query_chosen_chat','copy_text','disabled'].filter(k=>button?.[k]!==undefined);if(keys.length!==1)throw new Error('invalid_button');if(button.style&&!['danger','success','primary','link'].includes(button.style))throw new Error('invalid_button_style')}
+        for(const button of block.buttons){
+          text+=richTextCount(button?.text);
+          const keys=['url','callback_data','web_app','login_url','switch_inline_query','switch_inline_query_current_chat','switch_inline_query_chosen_chat','copy_text','disabled'].filter(k=>button?.[k]!==undefined);
+          if(keys.length!==1)throw new Error('invalid_button');
+          const kind=keys[0];
+          if(button.style&&!['danger','success','primary','link'].includes(button.style))throw new Error('invalid_button_style');
+          if(button.style==='link'&&kind!=='callback_data')throw new Error('invalid_button_style');
+          if(kind==='url'&&!safeHttp(button.url))throw new Error('invalid_button_url');
+          if(kind==='web_app'&&!safeHttp(button.web_app?.url))throw new Error('invalid_button_url');
+          if(kind==='login_url'&&!safeHttp(button.login_url?.url))throw new Error('invalid_button_url');
+          if(kind==='callback_data'){
+            const bytes=Buffer.byteLength(String(button.callback_data||''),'utf8');
+            if(bytes<1||bytes>64)throw new Error('invalid_callback_data')
+          }
+          if(kind==='copy_text'&&!String(button.copy_text?.text||''))throw new Error('invalid_copy_text')
+        }
       }
       if(['photo','video','audio','document','animation','voice_note'].includes(type)){
         media++;if(media>50)throw new Error('too_many_media');

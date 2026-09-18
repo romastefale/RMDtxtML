@@ -173,6 +173,12 @@ const actions={
   entities:()=>{skipEntityDetection=!skipEntityDetection;applyOptions();dirty()},
   export:()=>{syncDoc();const blob=new Blob([RMD.exportDocument(doc)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='RMDtxtML.rmdtxtml';a.click();URL.revokeObjectURL(url)},
   exporthtml:()=>{const h=currentHtml(),blob=new Blob([h],{type:'text/html'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='RMDtxtML-rich-message.html';a.click();URL.revokeObjectURL(url)},
+  exportsource:()=>{
+    const source=doc?.source;if(!source?.originalBase64)return say('Este documento não possui arquivo-fonte preservado');
+    const raw=atob(source.originalBase64),bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+    const blob=new Blob([bytes],{type:source.mime||'application/octet-stream'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download=source.name||'original';a.click();URL.revokeObjectURL(url)
+  },
   import:()=>$('#file').click(),
   revision:async()=>{if(!doc?.revisions?.length)return say('Nenhuma revisão salva');const list=doc.revisions.slice(-10).reverse(),choice=prompt('Revisão para restaurar:\n'+list.map(r=>r.revision+' · '+new Date(r.at).toLocaleString('pt-BR')).join('\n'),String(list[0].revision));if(choice===null)return;const rev=Number(choice);if(!Number.isSafeInteger(rev))return say('Revisão inválida');try{doc=await store.restore(doc,rev,modelOptions());rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;core.setModel(doc.content.model,{history:false});applyOptions();updateStatus('Revisão restaurada');say('Revisão restaurada')}catch{say('Revisão não encontrada')}},
   reset:async()=>{if(confirm('Apagar o documento atual e iniciar um documento vazio?')){doc=await store.reset({model:core.emptyModel(),normalizeModel:m=>core.normalizeModel(m)});rtl=false;skipEntityDetection=false;core.setModel(doc.content.model,{history:false});applyOptions();updateStatus('Novo documento')}}

@@ -134,7 +134,8 @@ function listItem(item,index,parent){
   const a=clean(item.attrs),out={blocks:asArray(item.content).map(blockToInput).filter(Boolean)};
   if(a.checked!==null&&a.checked!==undefined){out.has_checkbox=true;if(a.checked)out.is_checked=true}
   if(parent.type==='ordered_list'){
-    const value=Number.isInteger(a.value)?a.value:Number(parent.attrs?.order||1)+index;
+    const base=Number(parent.attrs?.order||1),delta=parent.attrs?.reversed?-index:index;
+    const value=Number.isInteger(a.value)?a.value:base+delta;
     out.value=value;
     out.type=String(a.style||parent.attrs?.style||'1')
   }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {authorizedDestinations,destinationId,publicDestinations,resolveDestination,signInitData,telegramCall,validateInitData,validateRichHtml} from '../src/telegram.mjs';
+import {authorizedDestinations,destinationId,publicDestinations,resolveDestination,signInitData,telegramCall,validateInitData,validateRichHtml,validateRichMessage} from '../src/telegram.mjs';
 
 const token='123456:TEST_TOKEN';
 const now=Date.UTC(2026,8,17,18,0,0);
@@ -54,4 +54,15 @@ test('telegramCall applies a bounded transport signal',async()=>{
   let signal;
   await telegramCall(token,'getMe',{}, {fetchImpl:async(_url,options)=>{signal=options.signal;return new Response(JSON.stringify({ok:true,result:{id:1}}),{status:200,headers:{'content-type':'application/json'}})}});
   assert.ok(signal instanceof AbortSignal)
+});
+
+test('Rich Message block validation enforces colspan totals and button invariants',()=>{
+  const base={blocks:[{type:'table',cells:[[
+    {text:'a',colspan:10,align:'left',valign:'top'},
+    {text:'b',colspan:11,align:'right',valign:'bottom'}
+  ]}]};
+  assert.equal(validateRichMessage(base).error,'too_many_table_columns');
+  assert.equal(validateRichMessage({blocks:[{type:'buttons',buttons:[{text:'x',url:'https://example.com',style:'link'}]}]}).error,'invalid_button_style');
+  assert.equal(validateRichMessage({blocks:[{type:'buttons',buttons:[{text:'x',callback_data:'x'.repeat(65)}]}]}).error,'invalid_callback_data');
+  assert.equal(validateRichMessage({blocks:[{type:'buttons',buttons:[{text:'x',callback_data:'ok',style:'link'}]}]}).ok,true)
 });

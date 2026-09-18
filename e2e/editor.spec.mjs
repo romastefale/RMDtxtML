@@ -326,6 +326,7 @@ test('official Rich HTML structures survive semantic round-trip without silent l
     '<figure><tg-map lat="41.9" long="12.5" zoom="14" width="600" height="400"/><figcaption>Roma<cite>Fonte</cite></figcaption></figure>'+
     '<tg-slideshow><img src="https://example.com/a.jpg"/><video src="https://example.com/b.mp4"/><figcaption>Mídia</figcaption></tg-slideshow>'+
     '<ol><li value="7" type="i">Item</li></ol>'+
+    '<ol reversed><li>A</li><li>B</li><li>C</li></ol>'+
     '<tg-button-row align="right"><tg-button type="callback_data" style="link" data="go">Abrir</tg-button><tg-button type="disabled">Off</tg-button></tg-button-row>';
   const result=await page.evaluate(value=>{const model=RMD.editor.parseHtml(value);RMD.editor.setModel(model,{history:false});const serialized=RMD.editor.html();return{model,serialized,reparsed:RMD.editor.parseHtml(serialized),rendered:RMD.editor.render()}},html);
   expect(result.reparsed).toEqual(result.model);
@@ -335,7 +336,9 @@ test('official Rich HTML structures survive semantic round-trip without silent l
   expect(blocks.find(x=>x.type==='table').caption).toBe('Tabela');
   expect(blocks.find(x=>x.type==='map').caption.credit).toBe('Fonte');
   expect(blocks.find(x=>x.type==='slideshow').blocks.map(x=>x.type)).toEqual(['photo','video']);
-  expect(blocks.find(x=>x.type==='list').items[0]).toMatchObject({value:7,type:'i'});
+  const lists=blocks.filter(x=>x.type==='list');
+  expect(lists[0].items[0]).toMatchObject({value:7,type:'i'});
+  expect(lists[1].items.map(x=>x.value)).toEqual([3,2,1]);
   expect(blocks.find(x=>x.type==='buttons').buttons).toHaveLength(2)
 });
 test('TXT import stays literal while Markdown import is interpreted and original source is preserved',async({page})=>{
@@ -344,6 +347,9 @@ test('TXT import stays literal while Markdown import is interpreted and original
   await expect(page.locator('#editor > p')).toHaveCount(2);await expect(page.locator('#editor h1,#editor strong')).toHaveCount(0);
   let source=await page.evaluate(()=>RMD.application.document().source);
   expect(source.kind).toBe('text');expect(source.originalText).toContain('**não é negrito**');expect(source.edited).toBe(false);
+  const [original]=await Promise.all([page.waitForEvent('download'),page.locator('[data-action="exportsource"]').click()]);
+  const stream=await original.createReadStream(),chunks=[];for await(const chunk of stream)chunks.push(chunk);
+  expect(original.suggestedFilename()).toBe('literal.txt');expect(Buffer.concat(chunks).toString('utf8')).toBe('# Não é título\n**não é negrito**');
   await page.locator('#file').setInputFiles({name:'doc.md',mimeType:'text/markdown',buffer:Buffer.from('# Título\n\n**forte**\n\n| A | B |\n| - | - |\n| 1 | 2 |','utf8')});
   await expect(page.locator('#editor > h1')).toHaveText('Título');await expect(page.locator('#editor strong')).toHaveText('forte');await expect(page.locator('#editor table')).toHaveCount(1);
   source=await page.evaluate(()=>RMD.application.document().source);
