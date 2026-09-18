@@ -94,7 +94,7 @@ test('confirmed Telegram rejection releases request id for retry',async()=>{
 
 test('web transfer is durable-store backed, opaque, authenticated and one-time',async()=>{
   await withServer(fetch,async base=>{
-    const semantic={schema:2,format:'semantic',model:{type:'doc',content:[{type:'heading',attrs:{level:2},content:[{type:'text',text:'Web'}]}]}};
+    const semantic={schema:2,format:'semantic',modelVersion:1,model:{type:'doc',content:[{type:'heading',attrs:{level:2},content:[{type:'text',text:'Web'}]}]}};
     const created=await post(base,'/api/transfers',{html:'<h2>Web</h2>',isRtl:true,skipEntityDetection:true,document:{id:'00000000-0000-4000-8000-000000000001',revision:7},semantic});
     assert.equal(created.status,201);const c=await created.json();
     assert.match(c.token,/^[A-Za-z0-9_-]{32}$/);assert.equal(c.telegramUrl,`https://t.me/rmdtxtml_test_bot?startapp=${c.token}`);
@@ -112,6 +112,18 @@ test('web transfer rejects malformed semantic payload instead of storing it',asy
   await withServer(fetch,async base=>{
     const response=await post(base,'/api/transfers',{html:'<p>x</p>',semantic:{schema:2,format:'wrong',model:{type:'doc'}}});
     assert.equal(response.status,400);const body=await response.json();assert.match(body.error,/semântico inválido/)
+  })
+});
+
+test('web transfer preserves model version and rejects invalid version metadata',async()=>{
+  await withServer(fetch,async base=>{
+    const semantic={schema:2,format:'semantic',modelVersion:7,model:{type:'doc',content:[{type:'paragraph'}]}};
+    const created=await post(base,'/api/transfers',{html:'<p>x</p>',semantic});
+    assert.equal(created.status,201);const tokenValue=(await created.json()).token;
+    const claimed=await post(base,'/api/transfers/claim',{token:tokenValue,initData:initData()}),body=await claimed.json();
+    assert.equal(claimed.status,200);assert.equal(body.transfer.semantic.modelVersion,7);
+    const invalid=await post(base,'/api/transfers',{html:'<p>x</p>',semantic:{schema:2,format:'semantic',modelVersion:0,model:{type:'doc'}}});
+    assert.equal(invalid.status,400)
   })
 });
 
