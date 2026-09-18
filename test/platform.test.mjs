@@ -58,6 +58,8 @@ test('boot uses stable viewport, safe areas and native fullscreen lifecycle',asy
   assert.equal(env.styles.get('--rmd-safe-top'),'8px');
   assert.equal(env.styles.get('--rmd-content-bottom'),'10px');
   assert.equal(tg.header,'bg_color');assert.equal(tg.background,'bg_color');assert.equal(tg.bottom,'bottom_bar_bg_color');
+  tg.viewportHeight=430;tg.emit('viewportChanged',{isStateStable:false});
+  assert.equal(env.styles.get('--rmd-app-height'),'680px');
   tg.viewportStableHeight=590;tg.emit('viewportChanged',{isStateStable:true});
   assert.equal(env.styles.get('--rmd-app-height'),'590px');
   tg.isFullscreen=true;tg.emit('fullscreenChanged');
