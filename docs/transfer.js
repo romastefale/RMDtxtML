@@ -24,7 +24,7 @@ async function claim(){
 async function openTelegram(){
   await RMD.ready;
   const m=metrics();
-  if(!m.html)return say('Escreva algum conteúdo');
+  if(m.empty)return say('Escreva ou adicione algum conteúdo');
   if(m.text>MAX_TEXT)return say('A mensagem excede 32.768 caracteres');
   setBusy(true,'Preparando…');status.textContent='Preparando Telegram…';
   try{
