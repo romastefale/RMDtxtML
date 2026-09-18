@@ -7,6 +7,7 @@ COPY docs ./docs
 COPY test ./test
 COPY e2e ./e2e
 COPY playwright.config.mjs ./
+COPY Dockerfile ./Dockerfile
 RUN node --check docs/platform.js
 RUN node --check docs/editor.js
 RUN node --check docs/document.js
