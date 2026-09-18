@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {mkdtempSync,rmSync} from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import {Store} from '../src/store.mjs';
 
 test('SQLite store claims a transfer exactly once',()=>{
@@ -11,6 +14,25 @@ test('SQLite store claims a transfer exactly once',()=>{
     assert.equal(first.html,'<p>x</p>');
     assert.equal(second,null)
   }finally{store.close()}
+});
+
+test('SQLite survives Store reopen on disk',()=>{
+  const dir=mkdtempSync(path.join(os.tmpdir(),'rmdtxtml-')),dbPath=path.join(dir,'state.sqlite'),token='b'.repeat(32);
+  try{
+    const first=new Store({env:{},dbPath});
+    first.createTransfer({token,html:'<p>persistido</p>',document:{id:'doc_12345678',revision:4},expiresAt:Date.now()+60_000});
+    first.beginSend('42','request-send-persist',{now:1000});
+    first.markUncertain('42','request-send-persist',{now:1100});
+    first.close();
+
+    const second=new Store({env:{},dbPath});
+    try{
+      assert.equal(second.claimTransfer(token).html,'<p>persistido</p>');
+      const state=second.sendState('42','request-send-persist');
+      assert.equal(state.state,'uncertain');
+      assert.equal(state.updatedAt,1100)
+    }finally{second.close()}
+  }finally{rmSync(dir,{recursive:true,force:true})}
 });
 
 test('SQLite rate window increments and resets',()=>{
@@ -33,6 +55,16 @@ test('send idempotency persists terminal result',()=>{
     store.completeSend('42','request-send-0001',{message_id:7},{now:1100});
     const state=store.sendState('42','request-send-0001');
     assert.equal(state.state,'done');assert.deepEqual(state.response,{message_id:7})
+  }finally{store.close()}
+});
+
+test('uncertain send remains blocked',()=>{
+  const store=new Store({env:{},dbPath:':memory:'});
+  try{
+    store.beginSend('42','request-send-uncertain',{now:1000});
+    store.markUncertain('42','request-send-uncertain',{now:1100});
+    assert.equal(store.sendState('42','request-send-uncertain').state,'uncertain');
+    assert.equal(store.beginSend('42','request-send-uncertain',{now:1200}),false)
   }finally{store.close()}
 });
 
