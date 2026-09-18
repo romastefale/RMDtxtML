@@ -133,13 +133,14 @@ test('drawer and preview do not mutate the document and restore focus',async({pa
 test('task checkbox is semantic state and survives persistence',async({page})=>{
   await web(page);await setEditor(page,'<p>Tarefas</p>');
   await page.locator('#more').click();await page.locator('[data-action="task"]').click();
-  const boxes=page.locator('#editor input[type="checkbox"]');await expect(boxes).toHaveCount(2);
-  await boxes.first().click();
-  const checked=await page.evaluate(()=>{
+  const readChecked=()=>page.evaluate(()=>{
     const model=RMD.editor.model(),items=[];
     const walk=n=>{if(n.type==='list_item')items.push(n.attrs?.checked);for(const child of n.content||[])walk(child)};walk(model);return items
   });
-  expect(checked).toEqual([true,true]);
+  expect(await readChecked()).toEqual([false,true]);
+  const boxes=page.locator('#editor input[type="checkbox"]');await expect(boxes).toHaveCount(2);
+  await boxes.first().click();
+  expect(await readChecked()).toEqual([true,true]);
   await page.locator('#save').click();await page.reload();await waitReady(page);
   await expect(page.locator('#editor input[type="checkbox"]:checked')).toHaveCount(2)
 });
