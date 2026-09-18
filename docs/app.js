@@ -72,16 +72,12 @@ function sanitizeRichHtml(input){
   [...doc.body.childNodes].forEach(node=>out.append(copy(node)));
   return out.innerHTML.trim();
 }
-function currentHtml(){return sanitizeRichHtml(ed.innerHTML)}
-function metrics(){
-  const h=currentHtml();
-  const d=new DOMParser().parseFromString('<body>'+h+'</body>','text/html');
-  return {html:h,text:[...d.body.textContent].length,blocks:d.body.querySelectorAll(BLOCK_SELECTOR).length};
-}
+function currentHtml(){return core.html()}
+function metrics(){const s=core.stats();return{html:currentHtml(),text:s.text,blocks:s.blocks}}
 function updateStatus(prefix=''){const m=metrics();status.textContent=`${prefix?prefix+' · ':''}${m.text.toLocaleString('pt-BR')}/${MAX_TEXT.toLocaleString('pt-BR')} caracteres · ${m.blocks} blocos`;status.classList.toggle('danger',m.text>MAX_TEXT)}
 function syncDoc(){
   if(!doc)return null;
-  doc.content.html=currentHtml();
+  doc.content.model=core.model();
   doc.options.isRtl=rtl;
   doc.options.skipEntityDetection=skipEntityDetection;
   return doc
@@ -89,7 +85,7 @@ function syncDoc(){
 async function persistDocument({checkpoint=false,label='Salvo'}={}){
   if(!doc)return null;
   syncDoc();
-  doc=await store.save(doc,{checkpoint,sanitize:sanitizeRichHtml});
+  doc=await store.save(doc,{checkpoint,normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
   platform.dirty(false);document.documentElement.dataset.dirty='false';updateStatus(label);
   return doc
 }
@@ -98,7 +94,7 @@ function schedulePersist(){
   saveTimer=setTimeout(()=>{persistDocument({label:'Salvo automaticamente'}).catch(()=>updateStatus('Falha ao salvar'))},700)
 }
 function dirty(){sendRequestId='';platform.dirty(true);document.documentElement.dataset.dirty='true';updateStatus('Não salvo');queueMicrotask(syncEditorUi);if(doc)schedulePersist()}
-const core=new RMD.Editor(ed,{change:dirty});
+const core=new RMD.Editor(ed,{change:dirty});RMD.editor=core;
 const menuIcons={
   ul:'list',ol:'list',task:'list',quote:'quote',expandable:'quote',pullquote:'quote',details:'file',pre:'code',divider:'text',table:'table',
   math:'text',mathblock:'text',image:'media',video:'media',audio:'media',document:'file',map:'media',collage:'media',slideshow:'media',
@@ -208,8 +204,8 @@ const actions={
   export:()=>{syncDoc();const blob=new Blob([RMD.exportDocument(doc)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='RMDtxtML.rmdtxtml';a.click();URL.revokeObjectURL(url)},
   exporthtml:()=>{const h=currentHtml(),blob=new Blob([h],{type:'text/html'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='RMDtxtML-rich-message.html';a.click();URL.revokeObjectURL(url)},
   import:()=>$('#file').click(),
-  revision:async()=>{if(!doc?.revisions?.length)return say('Nenhuma revisão salva');const list=doc.revisions.slice(-10).reverse(),choice=prompt('Revisão para restaurar:\n'+list.map(r=>r.revision+' · '+new Date(r.at).toLocaleString('pt-BR')).join('\n'),String(list[0].revision));if(choice===null)return;const rev=Number(choice);if(!Number.isSafeInteger(rev))return say('Revisão inválida');try{doc=await store.restore(doc,rev,{sanitize:sanitizeRichHtml});rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;core.setHtml(doc.content.html);applyOptions();updateStatus('Revisão restaurada');say('Revisão restaurada')}catch{say('Revisão não encontrada')}},
-  reset:async()=>{if(confirm('Apagar o documento atual e iniciar um documento vazio?')){doc=await store.reset({html:'<p><br></p>',sanitize:sanitizeRichHtml});rtl=false;skipEntityDetection=false;core.setHtml(doc.content.html);applyOptions();updateStatus('Novo documento')}}
+  revision:async()=>{if(!doc?.revisions?.length)return say('Nenhuma revisão salva');const list=doc.revisions.slice(-10).reverse(),choice=prompt('Revisão para restaurar:\n'+list.map(r=>r.revision+' · '+new Date(r.at).toLocaleString('pt-BR')).join('\n'),String(list[0].revision));if(choice===null)return;const rev=Number(choice);if(!Number.isSafeInteger(rev))return say('Revisão inválida');try{doc=await store.restore(doc,rev,{normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;core.setModel(doc.content.model,{history:false});applyOptions();updateStatus('Revisão restaurada');say('Revisão restaurada')}catch{say('Revisão não encontrada')}},
+  reset:async()=>{if(confirm('Apagar o documento atual e iniciar um documento vazio?')){doc=await store.reset({model:core.emptyModel(),normalizeModel:m=>core.normalizeModel(m)});rtl=false;skipEntityDetection=false;core.setModel(doc.content.model,{history:false});applyOptions();updateStatus('Novo documento')}}
 };
 $$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();actions[b.dataset.action]?.();queueMicrotask(syncEditorUi)});
 
@@ -218,13 +214,12 @@ $('#file').onchange=async e=>{
   try{
     const text=await f.text();
     if(f.name.toLowerCase().endsWith('.rmdtxtml')||f.type==='application/json'){
-      doc=RMD.importDocument(text,{sanitize:sanitizeRichHtml});
-      core.setHtml(doc.content.html);rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;applyOptions();
-      doc=await store.save(doc,{checkpoint:true,sanitize:sanitizeRichHtml});
+      doc=RMD.importDocument(text,{normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
+      core.setModel(doc.content.model,{history:false});rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;applyOptions();
+      doc=await store.save(doc,{checkpoint:true,normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
       updateStatus('Documento importado');say('Documento RMDtxtML importado')
     }else{
-      const html=sanitizeRichHtml(text)||'<p><br></p>';
-      core.setHtml(html);syncDoc();doc=await store.save(doc,{checkpoint:true,sanitize:sanitizeRichHtml});
+      core.setHtml(text,{history:false});syncDoc();doc=await store.save(doc,{checkpoint:true,normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
       updateStatus('HTML importado');say('Rich HTML importado')
     }
   }catch(error){say(error?.message==='unsupported_schema'?'Versão de documento não suportada':'Arquivo inválido')}
@@ -238,8 +233,6 @@ $('#previewBtn').onclick=()=>{
   updateStatus('Prévia');syncBack()
 };
 $('#back').onclick=()=>platform.close();
-ed.onpaste=e=>{const h=e.clipboardData?.getData('text/html');if(h){e.preventDefault();insertHtml(sanitizeRichHtml(h))}};
-
 async function sendMessage(){
   await RMD.ready;
   const m=metrics();
@@ -265,11 +258,10 @@ function applyOptions(){
   $('[data-action="entities"]')?.setAttribute('aria-pressed',String(!skipEntityDetection))
 }
 async function initDocument(){
-  const initial=sanitizeRichHtml(ed.innerHTML)||'<p><br></p>';
-  const loaded=await store.load({initialHtml:initial,sanitize:sanitizeRichHtml});
+  const loaded=await store.load({initialModel:core.model(),normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
   doc=loaded.doc;rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;
-  core.setHtml(doc.content.html);applyOptions();platform.dirty(false);document.documentElement.dataset.dirty='false';syncBack();syncEditorUi();
-  updateStatus(loaded.migrated?'Rascunho migrado':'Pronto');
+  core.setModel(doc.content.model,{history:false});applyOptions();platform.dirty(false);document.documentElement.dataset.dirty='false';syncBack();syncEditorUi();
+  updateStatus(loaded.migrated?'Documento migrado para modelo semântico':'Pronto');
   return doc
 }
 async function initDestinations(){
