@@ -112,7 +112,9 @@ function adoptTransfer(current,transfer,{normalizeModel,migrateHtml}={}){
   const meta=transfer?.document&&typeof transfer.document==='object'?transfer.document:{};
   const id=typeof meta.id==='string'&&/^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/.test(meta.id)?meta.id:null;
   const same=!!id&&current?.id===id;
-  const semantic=transfer?.semantic&&transfer.semantic.schema===SCHEMA&&transfer.semantic.format==='semantic'?transfer.semantic.model:null;
+  const semanticEnvelope=transfer?.semantic&&transfer.semantic.schema===SCHEMA&&transfer.semantic.format==='semantic'?transfer.semantic:null;
+  if(semanticEnvelope?.modelVersion!==undefined&&Number(semanticEnvelope.modelVersion)!==MODEL_VERSION)throw new Error('unsupported_model_version');
+  const semantic=semanticEnvelope?.model||null;
   const model=semantic?(normalizeModel?normalizeModel(semantic):clone(semantic)):typeof migrateHtml==='function'?migrateHtml(transfer?.html||'<p></p>'):EMPTY;
   const next=normalize(same?current:{id:id||undefined,schema:SCHEMA,format:'semantic',content:{model},meta:{revision:0},revisions:[]},{normalizeModel,migrateHtml});
   next.content.model=normalizeModel?normalizeModel(model):clone(model);
