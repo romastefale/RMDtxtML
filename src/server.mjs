@@ -56,9 +56,11 @@ function validRequestId(value){return typeof value==='string'&&/^[A-Za-z0-9][A-Z
 function transferSemantic(input){
   if(input===undefined||input===null)return null;
   if(typeof input!=='object'||input.schema!==2||input.format!=='semantic'||!input.model||typeof input.model!=='object')return false;
+  const modelVersion=input.modelVersion===undefined?1:Number(input.modelVersion);
+  if(!Number.isSafeInteger(modelVersion)||modelVersion<1||modelVersion>1000)return false;
   let encoded;try{encoded=JSON.stringify(input.model)}catch{return false}
   if(encoded.length>300000)return false;
-  return{schema:2,format:'semantic',model:input.model}
+  return{schema:2,format:'semantic',modelVersion,model:input.model}
 }
 
 async function createTransfer(req,res,{botToken,env,fetchImpl,headers,data}){
