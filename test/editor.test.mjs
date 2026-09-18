@@ -42,6 +42,13 @@ test('application persists semantic model rather than editor HTML',async()=>{
   assert.doesNotMatch(document,/content:\{html/);
 });
 
+test('application commands create semantic nodes without HTML mutation round-trips',async()=>{
+  const app=await read('docs/app.js');
+  assert.match(app,/const insertSpec=spec=>core\.insertSpec\(spec\)/);
+  assert.match(app,/type:'table'/);assert.match(app,/type:'button_row'/);assert.match(app,/type:'custom_emoji'/);
+  assert.doesNotMatch(app,/\baddBlock\(|\binsertHtml\(|core\.blockHtml\(/);
+});
+
 test('editor no longer uses execCommand or custom DOM undo stack',async()=>{
   const [source,app]=await Promise.all([read('client/editor.mjs'),read('docs/app.js')]);
   assert.doesNotMatch(source+'\n'+app,/execCommand|document\.execCommand/);
