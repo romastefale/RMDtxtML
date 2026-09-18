@@ -90,14 +90,14 @@ async function persistDocument({checkpoint=false,label='Salvo'}={}){
   if(!doc)return null;
   syncDoc();
   doc=await store.save(doc,{checkpoint,sanitize:sanitizeRichHtml});
-  platform.dirty(false);updateStatus(label);
+  platform.dirty(false);document.documentElement.dataset.dirty='false';updateStatus(label);
   return doc
 }
 function schedulePersist(){
   clearTimeout(saveTimer);
   saveTimer=setTimeout(()=>{persistDocument({label:'Salvo automaticamente'}).catch(()=>updateStatus('Falha ao salvar'))},700)
 }
-function dirty(){sendRequestId='';platform.dirty(true);updateStatus('Não salvo');if(doc)schedulePersist()}
+function dirty(){sendRequestId='';platform.dirty(true);document.documentElement.dataset.dirty='true';updateStatus('Não salvo');queueMicrotask(syncEditorUi);if(doc)schedulePersist()}
 const core=new RMD.Editor(ed,{change:dirty});
 function insertHtml(html){core.insert(html)}
 function addBlock(html){core.blockHtml(html)}
@@ -113,23 +113,40 @@ $('#link').onclick=()=>{const r=core.range(),text=r?.toString()||'',u=prompt('UR
 $('#code').onclick=()=>wrap('code');
 $('#spoiler').onclick=()=>wrap('tg-spoiler');
 $('#mark').onclick=()=>wrap('mark');
-let previewOpen=false;
+let previewOpen=false,drawerFocus=null;
+const app=$('.app'),sheet=$('.sheet'),more=$('#more');
 function syncBack(){
   if(!platform.isTelegram())return;
   if(drawer.classList.contains('open'))return platform.setBack(closeDrawer);
   if(previewOpen)return platform.setBack(closePreview);
   platform.setBack(null)
 }
-function openDrawer(){platform.keyboard();drawer.classList.add('open');syncBack()}
-function closeDrawer(){drawer.classList.remove('open');syncBack()}
+function openDrawer(){
+  platform.keyboard();drawerFocus=document.activeElement;drawer.classList.add('open');drawer.setAttribute('aria-hidden','false');
+  more.setAttribute('aria-expanded','true');app.inert=true;syncBack();requestAnimationFrame(()=>sheet.focus())
+}
+function closeDrawer(){
+  if(!drawer.classList.contains('open'))return;
+  drawer.classList.remove('open');drawer.setAttribute('aria-hidden','true');more.setAttribute('aria-expanded','false');
+  app.inert=false;syncBack();if(drawerFocus?.isConnected)drawerFocus.focus({preventScroll:true});drawerFocus=null
+}
 function closePreview(){
   if(!previewOpen)return;
   previewOpen=false;$('#previewWrap').classList.remove('open');$('#editWrap').hidden=false;
-  $('#previewBtn').innerHTML='<svg><use href="#i-preview"/></svg>';updateStatus('Edição');syncBack()
+  $('#previewBtn').innerHTML='<svg><use href="#i-preview"/></svg>';$('#previewBtn').setAttribute('aria-pressed','false');$('#previewBtn').setAttribute('aria-label','Abrir prévia');updateStatus('Edição');syncBack();ed.focus({preventScroll:true})
 }
 $('#more').onclick=openDrawer;
 $('#close').onclick=closeDrawer;
 drawer.onclick=e=>{if(e.target===drawer)closeDrawer()};
+drawer.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){e.preventDefault();closeDrawer();return}
+  if(e.key!=='Tab')return;
+  const list=$('.sheet button:not(:disabled),.sheet [href],.sheet select:not(:disabled),.sheet input:not(:disabled),.sheet [tabindex]:not([tabindex="-1"])').filter(x=>x.offsetParent!==null);
+  if(!list.length)return;const first=list[0],last=list.at(-1);
+  if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}
+  else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!drawer.classList.contains('open')&&previewOpen){e.preventDefault();closePreview()}});
 
 const actions={
   ul:()=>core.list('ul'),
@@ -188,7 +205,7 @@ $('#save').onclick=async()=>{try{await persistDocument({checkpoint:true,label:'S
 $('#previewBtn').onclick=()=>{
   if(previewOpen)return closePreview();
   platform.keyboard();previewOpen=true;$('#preview').innerHTML=currentHtml();$('#preview').dir=rtl?'rtl':'ltr';
-  $('#previewWrap').classList.add('open');$('#editWrap').hidden=true;$('#previewBtn').textContent='✕';
+  $('#previewWrap').classList.add('open');$('#editWrap').hidden=true;$('#previewBtn').innerHTML='<svg><use href="#i-edit"/></svg>';$('#previewBtn').setAttribute('aria-pressed','true');$('#previewBtn').setAttribute('aria-label','Voltar à edição');
   updateStatus('Prévia');syncBack()
 };
 $('#back').onclick=()=>platform.close();
@@ -215,13 +232,15 @@ if(platform.isTelegram())platform.setMain({text:'Enviar',visible:true,enabled:tr
 function applyOptions(){
   ed.dir=rtl?'rtl':'ltr';
   $('#rtlState').textContent=rtl?'Ligado':'Desligado';
-  $('#entityState').textContent=skipEntityDetection?'Desligada':'Ligada'
+  $('#entityState').textContent=skipEntityDetection?'Desligada':'Ligada';
+  $('[data-action="rtl"]')?.setAttribute('aria-pressed',String(rtl));
+  $('[data-action="entities"]')?.setAttribute('aria-pressed',String(!skipEntityDetection))
 }
 async function initDocument(){
   const initial=sanitizeRichHtml(ed.innerHTML)||'<p><br></p>';
   const loaded=await store.load({initialHtml:initial,sanitize:sanitizeRichHtml});
   doc=loaded.doc;rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;
-  core.setHtml(doc.content.html);applyOptions();platform.dirty(false);syncBack();
+  core.setHtml(doc.content.html);applyOptions();platform.dirty(false);document.documentElement.dataset.dirty='false';syncBack();syncEditorUi();
   updateStatus(loaded.migrated?'Rascunho migrado':'Pronto');
   return doc
 }
