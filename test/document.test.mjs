@@ -25,7 +25,7 @@ test('document format is semantic schema 2 and round-trips',async()=>{
   const{RMD}=await runtime();
   const doc=RMD.normalizeDocument({schema:2,format:'semantic',content:{model:model('Oi')},options:{isRtl:true}},{normalizeModel,migrateHtml});
   assert.equal(doc.schema,2);assert.equal(doc.format,'semantic');
-  assert.deepEqual(doc.content.model,model('Oi'));assert.equal(doc.options.isRtl,true);
+  assert.deepEqual(doc.content.model,model('Oi'));assert.equal(doc.content.modelVersion,1);assert.equal(RMD.DOCUMENT_MODEL_VERSION,1);assert.equal(doc.options.isRtl,true);
   assert.equal('html' in doc.content,false);
   const restored=RMD.importDocument(RMD.exportDocument(doc),{normalizeModel,migrateHtml});
   assert.deepEqual(restored.content,doc.content);assert.deepEqual(restored.options,doc.options)
@@ -39,7 +39,7 @@ test('schema 1 rich_html migrates once into semantic model',async()=>{
   }));
   const store=new RMD.DocumentStore(),loaded=await store.load({normalizeModel,migrateHtml});
   assert.equal(loaded.migrated,true);assert.equal(loaded.doc.schema,2);assert.equal(loaded.doc.format,'semantic');
-  assert.deepEqual(loaded.doc.content.model,model('Legado'));
+  assert.deepEqual(loaded.doc.content.model,model('Legado'));assert.equal(loaded.doc.content.modelVersion,1);
   assert.equal(loaded.doc.migration.fromSchema,1);assert.equal(loaded.doc.migration.original.content.html,'<p>Legado</p>');
   assert.deepEqual(loaded.doc.revisions[0].model,model('Anterior'));
   assert.equal(localStorage.getItem('rmdtxtml-document-v1'),null);
@@ -56,7 +56,7 @@ test('legacy draft migrates and checkpoints keep bounded semantic snapshots',asy
   let doc=loaded.doc;
   for(let i=0;i<35;i++){doc.content.model=model(String(i));doc=await store.save(doc,{checkpoint:true,normalizeModel,migrateHtml})}
   assert.equal(doc.revisions.length,30);assert.equal(doc.meta.revision,35);
-  assert.equal('html' in doc.revisions.at(-1),false)
+  assert.equal('html' in doc.revisions.at(-1),false);assert.equal(doc.revisions.at(-1).modelVersion,1)
 });
 
 test('document restore creates a new revision from a semantic checkpoint',async()=>{
@@ -72,12 +72,30 @@ test('transfer adoption preserves identity while converting HTML to semantic mod
   const{RMD}=await runtime();
   const current=RMD.normalizeDocument({schema:2,format:'semantic',id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',content:{model:model('Local')},meta:{revision:2}},{normalizeModel,migrateHtml});
   const semantic=model('Semântico');
-  const adopted=RMD.adoptTransferDocument(current,{html:'<h2>HTML descartável</h2>',semantic:{schema:2,format:'semantic',model:semantic},isRtl:true,document:{id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',revision:7}},{normalizeModel,migrateHtml});
+  const adopted=RMD.adoptTransferDocument(current,{html:'<h2>HTML descartável</h2>',semantic:{schema:2,format:'semantic',modelVersion:1,model:semantic},isRtl:true,document:{id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',revision:7}},{normalizeModel,migrateHtml});
   assert.equal(adopted.id,'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');assert.equal(adopted.meta.revision,7);
   assert.deepEqual(adopted.content.model,semantic);assert.equal(adopted.options.isRtl,true);assert.deepEqual(adopted.revisions,[])
 });
 
-test('application persists through DocumentStore and semantic editor API',async()=>{
+test('malformed semantic document fails closed without overwriting stored source',async()=>{
+  const{RMD,localStorage}=await runtime();
+  const raw=JSON.stringify({schema:2,format:'semantic',content:{},meta:{revision:4}});
+  localStorage.setItem('rmdtxtml-document-v2',raw);
+  const store=new RMD.DocumentStore();
+  await assert.rejects(()=>store.load({normalizeModel,migrateHtml}),/invalid_document_model/);
+  assert.equal(localStorage.getItem('rmdtxtml-document-v2'),raw)
+});
+
+test('unsupported semantic model version is rejected before adoption',async()=>{
+  const{RMD}=await runtime();
+  const current=RMD.normalizeDocument({schema:2,format:'semantic',content:{model:model('Local'),modelVersion:1}},{normalizeModel,migrateHtml});
+  assert.throws(()=>RMD.adoptTransferDocument(current,{
+    html:'<p>fallback</p>',
+    semantic:{schema:2,format:'semantic',modelVersion:2,model:model('Novo')}
+  },{normalizeModel,migrateHtml}),/unsupported_model_version/)
+});
+
+test('application exposes an explicit transfer boundary instead of sharing lexical editor state',async()=>{
   const [index,app,transfer]=await Promise.all([
     readFile(new URL('../docs/index.html',import.meta.url),'utf8'),
     readFile(new URL('../docs/app.js',import.meta.url),'utf8'),
@@ -85,7 +103,7 @@ test('application persists through DocumentStore and semantic editor API',async(
   ]);
   assert.ok(index.indexOf('./platform.js')<index.indexOf('./editor.js'));assert.ok(index.indexOf('./document.js')<index.indexOf('./app.js'));
   assert.doesNotMatch(app+'\n'+transfer,/rmdtxtml-draft-v2|content\.html/);
-  assert.match(app,/doc\.content\.model=core\.model\(\)/);
-  assert.match(app,/core\.setModel\(doc\.content\.model/);
-  assert.match(transfer,/core\.setModel\(doc\.content\.model/)
+  assert.match(app,/RMD\.application=application/);
+  assert.match(transfer,/RMD\.application/);
+  assert.doesNotMatch(transfer,/\bcore\.|\bstore\.|\bsyncDoc\(|\bpersistDocument\(/)
 });
