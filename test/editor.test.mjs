@@ -5,10 +5,12 @@ import {readFile} from 'node:fs/promises';
 const read=p=>readFile(new URL('../'+p,import.meta.url),'utf8');
 
 test('browser scripts compile and editor core loads first',async()=>{
-  const [index,editor,app,transfer]=await Promise.all([read('docs/index.html'),read('docs/editor.js'),read('docs/app.js'),read('docs/transfer.js')]);
+  const [index,platform,editor,app,transfer]=await Promise.all([read('docs/index.html'),read('docs/platform.js'),read('docs/editor.js'),read('docs/app.js'),read('docs/transfer.js')]);
+  assert.doesNotThrow(()=>new Function(platform));
   assert.doesNotThrow(()=>new Function(editor));
   assert.doesNotThrow(()=>new Function(app));
   assert.doesNotThrow(()=>new Function(transfer));
+  assert.ok(index.indexOf('./platform.js')<index.indexOf('./editor.js'));
   assert.ok(index.indexOf('./editor.js')<index.indexOf('./app.js'));
   assert.ok(index.indexOf('./app.js')<index.indexOf('./transfer.js'));
 });
@@ -16,7 +18,7 @@ test('browser scripts compile and editor core loads first',async()=>{
 test('editor architecture has no legacy command or backend constants',async()=>{
   const [app,transfer]=await Promise.all([read('docs/app.js'),read('docs/transfer.js')]);
   const code=app+'\n'+transfer;
-  assert.doesNotMatch(code,/document\.execCommand|APIKEY|DEFAULT_API|MAX_BYTES|m\.bytes/);
+  assert.doesNotMatch(code,/document\.execCommand|APIKEY|DEFAULT_API|MAX_BYTES|m\.bytes|window\.Telegram\?\.WebApp|rmdtxtml\.up\.railway\.app/);
   assert.match(app,/new RMD\.Editor\(ed/);
   assert.match(transfer,/core\.setHtml\(/);
 });
