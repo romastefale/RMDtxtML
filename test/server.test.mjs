@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
+import {mkdtempSync,rmSync} from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {createServer} from '../src/server.mjs';
 import {Store} from '../src/store.mjs';
 import {signInitData} from '../src/telegram.mjs';
@@ -109,4 +112,41 @@ test('web transfer rejects invalid rich content',async()=>{
     const response=await post(base,'/api/transfers',{html:'<script>x</script>'});
     assert.equal(response.status,400)
   })
+});
+
+
+test('expired Telegram session is rejected at the authenticated API boundary',async()=>{
+  await withServer(fetch,async base=>{
+    const expired=signInitData({auth_date:Math.floor(Date.now()/1000)-90000,user:JSON.stringify({id:42})},token);
+    const response=await post(base,'/api/transfers/claim',{token:'a'.repeat(32),initData:expired});
+    const body=await response.json();
+    assert.equal(response.status,401);assert.match(body.error,/expired/)
+  })
+});
+
+test('transfer survives a real server restart when SQLite path is durable',async()=>{
+  const dir=mkdtempSync(path.join(os.tmpdir(),'rmdtxtml-server-')),dbPath=path.join(dir,'state.sqlite');
+  const env={SEND_SCOPE:'self',INIT_DATA_MAX_AGE:'86400',ALLOWED_ORIGINS:'https://example.com',TRANSFER_TTL_SECONDS:'900',BOT_USERNAME:'rmdtxtml_test_bot'};
+  const start=async()=>{
+    const store=new Store({env,dbPath}),server=createServer({botToken:token,env,fetchImpl:fetch,store});
+    server.listen(0,'127.0.0.1');await once(server,'listening');
+    return{store,server,base:`http://127.0.0.1:${server.address().port}`}
+  };
+  let first,second;
+  try{
+    first=await start();
+    const created=await post(first.base,'/api/transfers',{html:'<p>restart</p>',document:{id:'restart_document_01',revision:3}});
+    assert.equal(created.status,201);const tokenValue=(await created.json()).token;
+    first.server.close();await once(first.server,'close');first.store.close();first=null;
+
+    second=await start();
+    const claimed=await post(second.base,'/api/transfers/claim',{token:tokenValue,initData:initData()});
+    const body=await claimed.json();
+    assert.equal(claimed.status,200);assert.equal(body.transfer.html,'<p>restart</p>');
+    assert.deepEqual(body.transfer.document,{id:'restart_document_01',revision:3})
+  }finally{
+    if(first){first.server.close();await once(first.server,'close');first.store.close()}
+    if(second){second.server.close();await once(second.server,'close');second.store.close()}
+    rmSync(dir,{recursive:true,force:true})
+  }
 });
