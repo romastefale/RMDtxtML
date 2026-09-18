@@ -78,6 +78,14 @@ test('inline formatting toggles without losing the selected text',async({page})=
   expect(await page.evaluate(()=>getSelection().toString())).toBe('beta')
 });
 
+test('subscript applies and clear-format affects only the selected range',async({page})=>{
+  await web(page);await setEditor(page,'<p><strong>alpha beta gamma</strong></p>');await selectText(page,'beta');
+  await page.locator('#more').click();await page.locator('[data-action="sub"]').click();
+  await expect(page.locator('#editor sub')).toHaveText('beta');
+  await selectText(page,'beta');await page.locator('#more').click();await page.locator('[data-action="clear"]').click();
+  expect(await page.locator('#editor').evaluate(el=>el.innerHTML)).toBe('<p><strong>alpha </strong>beta<strong> gamma</strong></p>')
+});
+
 test('link prompt preserves selection and block conversion stays in place',async({page})=>{
   await web(page);await setEditor(page,'<p>alpha beta gamma</p>');await selectText(page,'beta');
   page.once('dialog',dialog=>dialog.accept('https://example.com/x'));
