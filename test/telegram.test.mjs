@@ -60,7 +60,7 @@ test('Rich Message block validation enforces colspan totals and button invariant
   const base={blocks:[{type:'table',cells:[[
     {text:'a',colspan:10,align:'left',valign:'top'},
     {text:'b',colspan:11,align:'right',valign:'bottom'}
-  ]}]};
+  ]]}]};
   assert.equal(validateRichMessage(base).error,'too_many_table_columns');
   assert.equal(validateRichMessage({blocks:[{type:'buttons',buttons:[{text:'x',url:'https://example.com',style:'link'}]}]}).error,'invalid_button_style');
   assert.equal(validateRichMessage({blocks:[{type:'buttons',buttons:[{text:'x',callback_data:'x'.repeat(65)}]}]}).error,'invalid_callback_data');
