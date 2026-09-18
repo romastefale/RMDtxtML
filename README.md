@@ -1,10 +1,10 @@
 # RMDtxtML
 
-RMDtxtML 1.0.0 é um editor Web + Telegram Mini App para criar, visualizar, transferir e publicar Rich Messages da Telegram Bot API 10.3.
+RMDtxtML 1.1.0-rc.1 é um editor Web + Telegram Mini App para criar, visualizar, transferir e publicar Rich Messages da Telegram Bot API 10.3.
 
 ## Arquitetura
 
-O documento canônico vive no frontend e passa por editor, sanitização, preview e persistência local. A transferência Web → Telegram usa token opaco de curta duração. Operações autenticadas validam `Telegram.WebApp.initData` no servidor. O cliente recebe somente `destinationId` e rótulo; o backend resolve o `chat_id` autorizado internamente antes de chamar `sendRichMessage`.
+O documento canônico é um modelo semântico ProseMirror (`schema: 2`, `format: semantic`). Rich HTML deixou de ser estado do documento: ele é uma projeção usada para importação, preview, transferência e publicação. A transferência Web → Telegram usa token opaco de curta duração. Operações autenticadas validam `Telegram.WebApp.initData` no servidor. O cliente recebe somente `destinationId` e rótulo; o backend resolve o `chat_id` autorizado internamente antes de chamar `sendRichMessage`.
 
 O runtime de produção usa Node.js 24.21, SQLite e Railway. O Docker mantém Chromium/Playwright apenas no estágio de QA; a imagem final é Node Alpine.
 
@@ -51,4 +51,4 @@ O estágio de QA executa `node --check`, todos os testes Node e Playwright/Chrom
 
 ## Release
 
-Versão de produção: `1.0.0`.
+Versão atual: `1.1.0-rc.1`.
