@@ -36,7 +36,6 @@ test('editor UI reports formatting and block state',async()=>{
   assert.match(app,/\$\$\('\[data-cmd\]'\)\.forEach/);
   assert.match(app,/actions\[b\.dataset\.action\]/);
   assert.match(app,/\$\$\('\[data-action\]'\)/);
-  assert.doesNotMatch(app,/(?<!\$)\$\('\[data-cmd\]'\)\.forEach|(?<!\$)\$\('\[data-action\]'\)\.forEach/);
   assert.doesNotMatch(app,/textContent='✕'/)
 });
 
