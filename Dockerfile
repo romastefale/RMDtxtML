@@ -19,7 +19,7 @@ RUN node --check docs/platform.js \
  && node --check src/server.mjs \
  && node --check src/telegram.mjs
 RUN node --test test/*.test.mjs
-RUN playwright test
+RUN npx --no-install playwright test
 RUN touch /tmp/rmdtxtml-qa-passed
 
 FROM node:24.21.0-alpine
