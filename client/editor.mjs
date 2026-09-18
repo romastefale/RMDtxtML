@@ -315,6 +315,11 @@ class Editor{
   insertNode(node){
     this.view.dispatch(this.view.state.tr.replaceSelectionWith(node).scrollIntoView());this.view.focus();return true
   }
+  insertSpec(spec){return this.insertNode(schema.nodeFromJSON(spec))}
+  insertText(text,marks=[]){
+    const node=schema.text(String(text),marks.map(mark=>schema.markFromJSON(mark)));
+    return this.insertNode(node)
+  }
   taskList(items=[{text:'Tarefa',checked:false}]){
     const list=schema.nodes.bullet_list.create(null,items.map(item=>schema.nodes.list_item.create(
       {checked:item.checked===true},
