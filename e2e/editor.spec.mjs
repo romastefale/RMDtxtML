@@ -437,3 +437,16 @@ test('product forms use the in-app accessible dialog instead of native browser p
   await page.keyboard.press('Escape');await expect(page.locator('#inputDialog')).toHaveJSProperty('open',false);
   expect(nativeDialogs).toEqual([])
 });
+
+
+test('edit and preview tabs support keyboard navigation',async({page})=>{
+  await web(page);await setEditor(page,'<p>Navegação</p>');
+  await page.locator('#editTab').focus();await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#previewTab')).toHaveAttribute('aria-selected','true');
+  await expect(page.locator('#previewTab')).toHaveAttribute('tabindex','0');
+  await expect(page.locator('#previewWrap')).toBeVisible();
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.locator('#editTab')).toHaveAttribute('aria-selected','true');
+  await expect(page.locator('#editTab')).toHaveAttribute('tabindex','0');
+  await expect(page.locator('#editWrap')).toBeVisible()
+});

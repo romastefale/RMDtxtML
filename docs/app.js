@@ -23,7 +23,7 @@ function syncTheme(){const dark=platform.isTelegram()?platform.colorScheme()==='
 function say(message){toast.textContent=message;toast.classList.add('show');clearTimeout(say.t);say.t=setTimeout(()=>toast.classList.remove('show'),2200)}
 function ask({title='Editar',label='Valor',value='',help='',confirmText='Confirmar',type='text',danger=false,confirmOnly=false}={}){
   return new Promise(resolve=>{
-    const active=document.activeElement;
+    const focused=document.activeElement,active=focused?.closest?.('.drawer')?ed:focused;
     inputDialogTitle.textContent=title;inputDialogLabel.textContent=label;inputDialogValue.type=type;inputDialogValue.value=String(value??'');
     inputDialogHelp.textContent=help;inputDialogHelp.hidden=!help;inputDialogOk.textContent=confirmText;inputDialog.dataset.danger=String(danger);inputField.hidden=confirmOnly;
     let settled=false;
@@ -148,7 +148,7 @@ function closeDrawer(){
 function closePreview(){
   if(!previewOpen)return;
   previewOpen=false;document.documentElement.dataset.view='edit';$('#previewWrap').hidden=true;$('#previewWrap').classList.remove('open');$('#editWrap').hidden=false;
-  editTab.setAttribute('aria-selected','true');previewTab.setAttribute('aria-selected','false');updateStatus();syncBack();ed.focus({preventScroll:true})
+  editTab.setAttribute('aria-selected','true');editTab.tabIndex=0;previewTab.setAttribute('aria-selected','false');previewTab.tabIndex=-1;updateStatus();syncBack();ed.focus({preventScroll:true})
 }
 function openPreview(){
   if(previewOpen)return;
@@ -156,10 +156,14 @@ function openPreview(){
   const rendered=renderCurrent(),preview=$('#preview');preview.innerHTML=rendered.previewHtml;preview.dir=rtl?'rtl':'ltr';
   const keyboard=keyboardTelegramPreview();if(keyboard.childElementCount)preview.appendChild(keyboard);$('#previewMechanism').textContent=rendered.mechanism;
   $('#previewWrap').hidden=false;$('#previewWrap').classList.add('open');$('#editWrap').hidden=true;
-  editTab.setAttribute('aria-selected','false');previewTab.setAttribute('aria-selected','true');updateStatus('Prévia');syncBack()
+  editTab.setAttribute('aria-selected','false');editTab.tabIndex=-1;previewTab.setAttribute('aria-selected','true');previewTab.tabIndex=0;updateStatus('Prévia');syncBack()
 }
 $('#more').onclick=openDrawer;
 editTab.onclick=closePreview;previewTab.onclick=openPreview;
+$('.viewSwitch').addEventListener('keydown',e=>{
+  if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();
+  const target=e.key==='ArrowLeft'||e.key==='Home'?editTab:previewTab;target.click();target.focus()
+});
 if(platform.isTelegram())platform.setSettings(openDrawer);
 $('#close').onclick=closeDrawer;
 drawer.onclick=e=>{if(e.target===drawer)closeDrawer()};
