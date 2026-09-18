@@ -57,13 +57,13 @@ test('document restore creates a new revision from a checkpoint',async()=>{
   assert.equal(restored.meta.revision,3)
 });
 
-test('application persists through DocumentStore, not the legacy draft key',async()=>{
+test('transfer adoption preserves canonical identity',async()=>{\n  const{RMD}=await runtime();\n  const current=RMD.normalizeDocument({id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',content:{html:'<p>Local</p>'},meta:{revision:2}});\n  const adopted=RMD.adoptTransferDocument(current,{html:'<h2>Web</h2>',isRtl:true,document:{id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',revision:7}});\n  assert.equal(adopted.id,'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');\n  assert.equal(adopted.meta.revision,7);\n  assert.equal(adopted.content.html,'<h2>Web</h2>');\n  assert.equal(adopted.options.isRtl,true);\n  assert.deepEqual(adopted.revisions,[])\n});\n\ntest('application persists through DocumentStore, not the legacy draft key',async()=>{
   const [index,app,transfer]=await Promise.all([
     readFile(new URL('../docs/index.html',import.meta.url),'utf8'),
     readFile(new URL('../docs/app.js',import.meta.url),'utf8'),
     readFile(new URL('../docs/transfer.js',import.meta.url),'utf8')
   ]);
-  assert.ok(index.indexOf('./document.js')<index.indexOf('./app.js'));
+  assert.ok(index.indexOf('./platform.js')<index.indexOf('./editor.js'));\n  assert.ok(index.indexOf('./document.js')<index.indexOf('./app.js'));
   assert.doesNotMatch(app+'\n'+transfer,/localStorage\.setItem\(KEY|rmdtxtml-draft-v2/);
   assert.match(app,/new RMD\.DocumentStore\(\)/);
   assert.match(app,/persistDocument/);
