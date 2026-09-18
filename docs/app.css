@@ -139,6 +139,7 @@ tg-button-row[align="right"]{justify-content:flex-end}
 .status{min-width:0;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bottom button{height:44px;color:var(--accent);font-weight:660}
 .bottom #previewBtn{width:44px}
+.bottom #previewBtn[aria-pressed="true"],:root[data-dirty="true"] .saveBtn{background:var(--softAccent);color:var(--accent)}
 .saveBtn{display:inline-flex;align-items:center;gap:7px;padding:0 10px}
 .saveBtn svg{width:18px;height:18px}
 
@@ -162,7 +163,7 @@ tg-button-row[align="right"]{justify-content:flex-end}
 .sheetHandle{width:34px;height:4px;border-radius:99px;background:var(--line);margin:7px auto 0}
 .sheetHead{
   display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;min-height:50px;
-  background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(14px);z-index:2;border-bottom:1px solid var(--hairline)
+  background:var(--bg);z-index:2;border-bottom:1px solid var(--hairline)
 }
 .sheetHead strong{font-size:14px;font-weight:680}
 .sheetHead button{width:44px;color:var(--muted)}
