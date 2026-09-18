@@ -21,8 +21,9 @@ test('SQLite survives Store reopen on disk',()=>{
   try{
     const first=new Store({env:{},dbPath});
     first.createTransfer({token,html:'<p>persistido</p>',document:{id:'doc_12345678',revision:4},expiresAt:Date.now()+60_000});
-    first.beginSend('42','request-send-persist',{now:1000});
-    first.markUncertain('42','request-send-persist',{now:1100});
+    const now=Date.now();
+    first.beginSend('42','request-send-persist',{now});
+    first.markUncertain('42','request-send-persist',{now:now+100});
     first.close();
 
     const second=new Store({env:{},dbPath});
@@ -30,7 +31,7 @@ test('SQLite survives Store reopen on disk',()=>{
       assert.equal(second.claimTransfer(token).html,'<p>persistido</p>');
       const state=second.sendState('42','request-send-persist');
       assert.equal(state.state,'uncertain');
-      assert.equal(state.updatedAt,1100)
+      assert.equal(state.updatedAt,now+100)
     }finally{second.close()}
   }finally{rmSync(dir,{recursive:true,force:true})}
 });
