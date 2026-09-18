@@ -78,7 +78,7 @@ const nodes={
     attrs:{checked:{default:null}},content:'paragraph block*',defining:true,
     parseDOM:[{tag:'li',getAttrs:el=>{const box=el.querySelector(':scope > input[type="checkbox"]');return{checked:box?box.checked:null}}}],
     toDOM:node=>node.attrs.checked===null?['li',0]:['li',{'data-task':node.attrs.checked?'done':'open'},
-      ['input',{type:'checkbox',contenteditable:'false',...(node.attrs.checked?{checked:'checked'}:{})}],['span',0]]
+      ['input',{type:'checkbox',contenteditable:'false',...(node.attrs.checked?{checked:'checked'}:{})}],0]
   },
   math_inline:{
     inline:true,group:'inline',atom:true,attrs:{expression:{default:''}},
