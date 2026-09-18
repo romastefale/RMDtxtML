@@ -10,10 +10,10 @@ async function claim(){
   try{
     status.textContent='Recuperando composição…';
     const result=await platform.json('/api/transfers/claim',{method:'POST',auth:true,body:{token}});
-    doc=RMD.adoptTransferDocument(doc,result.transfer,{sanitize:sanitizeRichHtml});
+    doc=RMD.adoptTransferDocument(doc,result.transfer,{normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
     rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;
-    core.setHtml(doc.content.html);applyOptions();
-    doc=await store.save(doc,{checkpoint:true,sanitize:sanitizeRichHtml});
+    core.setModel(doc.content.model,{history:false});applyOptions();
+    doc=await store.save(doc,{checkpoint:true,normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
     platform.cleanStartParam();
     updateStatus('Importado do Web');say('Documento continuado no Telegram')
   }catch(error){
