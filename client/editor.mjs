@@ -286,6 +286,16 @@ class Editor{
     }
     const ok=wrapInList(type)(this.view.state,this.view.dispatch,this.view);if(ok)this.view.focus();return ok
   }
+  insertNode(node){
+    this.view.dispatch(this.view.state.tr.replaceSelectionWith(node).scrollIntoView());this.view.focus();return true
+  }
+  taskList(items=[{text:'Tarefa',checked:false}]){
+    const list=schema.nodes.bullet_list.create(null,items.map(item=>schema.nodes.list_item.create(
+      {checked:item.checked===true},
+      schema.nodes.paragraph.create(null,item.text?schema.text(String(item.text)):null)
+    )));
+    return this.insertNode(list)
+  }
   insert(html){
     const parsed=schema.nodeFromJSON(parseHtml(html)),slice=new Slice(parsed.content,0,0);
     this.view.dispatch(this.view.state.tr.replaceSelection(slice).scrollIntoView());this.view.focus()
