@@ -61,6 +61,7 @@ export class Store{
       beginSend:this.db.prepare("INSERT OR IGNORE INTO sends(user_id,request_id,state,created_at,updated_at) VALUES(?,?,'pending',?,?)"),
       doneSend:this.db.prepare("UPDATE sends SET state='done',response_json=?,updated_at=? WHERE user_id=? AND request_id=?"),
       failSend:this.db.prepare('DELETE FROM sends WHERE user_id=? AND request_id=?'),
+      uncertainSend:this.db.prepare("UPDATE sends SET state='uncertain',updated_at=? WHERE user_id=? AND request_id=?"),
       pruneSends:this.db.prepare("DELETE FROM sends WHERE created_at<? AND state='done'")
     }
   }
@@ -116,5 +117,6 @@ export class Store{
   completeSend(userId,requestId,response,{now=Date.now()}={}){
     this.q.doneSend.run(json(response),now,String(userId),String(requestId))
   }
+  markUncertain(userId,requestId,{now=Date.now()}={}){this.q.uncertainSend.run(now,String(userId),String(requestId))}
   releaseSend(userId,requestId){this.q.failSend.run(String(userId),String(requestId))}
 }
