@@ -128,7 +128,7 @@ const actions={
   entities:()=>{skipEntityDetection=!skipEntityDetection;$('#entityState').textContent=skipEntityDetection?'Desligada':'Ligada';dirty()},
   export:()=>{const h=currentHtml(),blob=new Blob([h],{type:'text/html'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='RMDtxtML-rich-message.html';a.click();URL.revokeObjectURL(url)},
   import:()=>$('#file').click(),
-  reset:()=>{if(confirm('Apagar o rascunho local e iniciar um documento vazio?')){ed.innerHTML='<p><br></p>';rtl=false;skipEntityDetection=false;ed.dir='ltr';localStorage.removeItem(KEY);dirty()}},
+  reset:()=>{if(confirm('Apagar o rascunho local e iniciar um documento vazio?')){core.setHtml('<p><br></p>');rtl=false;skipEntityDetection=false;ed.dir='ltr';localStorage.removeItem(KEY);dirty()}},
   server:()=>{const old=apiBase(),u=prompt('URL HTTPS do backend',old);if(u!==null&&/^https:\/\//i.test(u)){localStorage.setItem('rmdtxtml-api-v1',u.replace(/\/+$/,''));say('Servidor salvo')}}
 };
 $('[data-action]').forEach(b=>b.onclick=()=>{drawer.classList.remove('open');if(b.dataset.action==='mark')return wrap('mark');actions[b.dataset.action]?.()});
