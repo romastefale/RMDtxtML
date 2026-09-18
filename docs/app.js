@@ -124,7 +124,7 @@ const actions={
   clear:()=>{if(!core.clear())say('Selecione um trecho primeiro')},
   ul:()=>core.list('ul'),
   ol:()=>core.list('ol'),
-  task:()=>addBlock('<ul><li><input type="checkbox"> Tarefa</li><li><input type="checkbox" checked> Concluída</li></ul>'),
+  task:()=>core.taskList([{text:'Tarefa',checked:false},{text:'Concluída',checked:true}]),
   quote:()=>addBlock('<blockquote>Citação<cite>Autor</cite></blockquote>'),
   expandable:()=>addBlock('<blockquote expandable>Citação expansível<br>Conteúdo adicional<cite>Autor</cite></blockquote>'),
   pullquote:()=>addBlock('<aside>Trecho em destaque<cite>Autor</cite></aside>'),
