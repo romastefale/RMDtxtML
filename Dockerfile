@@ -7,16 +7,15 @@ COPY docs ./docs
 COPY test ./test
 COPY e2e ./e2e
 COPY playwright.config.mjs ./
-RUN node --check docs/platform.js \
- && node --check docs/editor.js \
- && node --check docs/document.js \
- && node --check docs/app.js \
- && node --check docs/transfer.js \
- && node --check src/store.mjs \
- && node --check src/server.mjs \
- && node --check src/telegram.mjs \
- && npm test \
- && touch /tmp/rmdtxtml-qa-passed
+RUN node --check docs/platform.js
+RUN node --check docs/editor.js
+RUN node --check docs/document.js
+RUN node --check docs/app.js
+RUN node --check docs/transfer.js
+RUN node --check src/store.mjs
+RUN node --check src/server.mjs
+RUN node --check src/telegram.mjs
+RUN npm test && touch /tmp/rmdtxtml-qa-passed
 
 FROM node:24.21.0-alpine
 WORKDIR /app
