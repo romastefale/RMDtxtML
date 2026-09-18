@@ -1,5 +1,5 @@
 import {Schema,DOMParser as PMDOMParser,DOMSerializer} from 'prosemirror-model';
-import {EditorState} from 'prosemirror-state';
+import {AllSelection,EditorState,TextSelection} from 'prosemirror-state';
 import {EditorView} from 'prosemirror-view';
 import {history,undo,redo} from 'prosemirror-history';
 import {keymap} from 'prosemirror-keymap';
@@ -47,7 +47,7 @@ const mediaNode=(tag,type)=>({
 });
 
 const nodes={
-  doc:{content:'block*'},
+  doc:{content:'block+'},
   text:{group:'inline'},
   paragraph:{content:'inline*',group:'block',parseDOM:[{tag:'p'}],toDOM:()=>['p',0]},
   heading:{
@@ -280,6 +280,19 @@ class Editor{
     return{collapsed:empty,toString:()=>this.view.state.doc.textBetween(from,to,'\n')}
   }
   selectionText(){const{from,to}=this.view.state.selection;return this.view.state.doc.textBetween(from,to,'\n')}
+  selectText(needle,occurrence=0){
+    const target=String(needle),hits=[];if(!target)return false;
+    this.view.state.doc.descendants((node,pos)=>{if(!node.isText)return;let at=-1,start=0;while((at=node.text.indexOf(target,start))>=0){hits.push({from:pos+at,to:pos+at+target.length});start=at+target.length}});
+    const hit=hits[occurrence];if(!hit)return false;
+    this.view.dispatch(this.view.state.tr.setSelection(TextSelection.create(this.view.state.doc,hit.from,hit.to)));this.view.focus();return true
+  }
+  selectAll(){this.view.dispatch(this.view.state.tr.setSelection(new AllSelection(this.view.state.doc)));this.view.focus();return true}
+  setCursorInText(needle,offset=0){
+    const target=String(needle);let hit=null;
+    this.view.state.doc.descendants((node,pos)=>{if(hit||!node.isText)return;const at=node.text.indexOf(target);if(at>=0)hit=pos+at+Math.max(0,Math.min(target.length,Number(offset)||0))});
+    if(hit===null)return false;this.view.dispatch(this.view.state.tr.setSelection(TextSelection.create(this.view.state.doc,hit)));this.view.focus();return true
+  }
+  selectionState(){const{from,to,empty}=this.view.state.selection;return{from,to,empty,text:this.view.state.doc.textBetween(from,to,'\n')}}
   hasFormat(tag){
     const type=schema.marks[markMap[String(tag||'').toLowerCase()]];if(!type)return false;
     const {from,to,empty,$from}=this.view.state.selection;
