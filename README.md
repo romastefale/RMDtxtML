@@ -1,54 +1,77 @@
 # RMDtxtML
 
-RMDtxtML 1.1.0-rc.1 é um editor Web + Telegram Mini App para criar, visualizar, transferir e publicar Rich Messages da Telegram Bot API 10.3.
+RMDtxtML é um editor Web + Telegram Mini App para criar, visualizar, transferir e publicar Rich Messages da Telegram Bot API 10.3.
 
-## Arquitetura
+## Estado
 
-O documento canônico é um modelo semântico ProseMirror (`schema: 2`, `format: semantic`). Rich HTML deixou de ser estado do documento: ele é uma projeção usada para importação, preview, transferência e publicação. A transferência Web → Telegram usa token opaco de curta duração. Operações autenticadas validam `Telegram.WebApp.initData` no servidor. O cliente recebe somente `destinationId` e rótulo; o backend resolve o `chat_id` autorizado internamente antes de chamar `sendRichMessage`.
+A linha atual é **1.1.0-rc.1**. O núcleo documental foi migrado para um modelo semântico ProseMirror; Rich HTML deixou de ser a fonte de verdade do documento e passou a ser uma representação de importação/publicação.
 
-O runtime de produção usa Node.js 24.21, SQLite e Railway. O Docker mantém Chromium/Playwright apenas no estágio de QA; a imagem final é Node Alpine.
+## Arquitetura do documento
 
-## Segurança
+```text
+EditorView / transações
+        ↓
+Documento semântico schema 2
+        ├─ persistência/revisões
+        ├─ transferência Web ↔ Telegram
+        └─ renderer Rich HTML
+                    ↓
+             Telegram Bot API
+```
 
-- backend de produção fixo no mesmo origin; não existe override via localStorage;
-- validação HMAC e expiração de `initData` no servidor;
-- destinos de publicação opacos e resolvidos server-side;
-- CORS/origin checks, limites de corpo e rate limiting;
-- tokens de transferência expiram e são consumidos atomicamente;
-- cada envio usa `requestId`; sucesso é idempotente e falha de transporte indeterminada não é repetida cegamente;
-- chamadas à Bot API têm timeout;
-- Rich HTML é validado antes de transferência e publicação.
+O schema representa parágrafos, H1–H6, rodapé, citações, listas/tarefas, código, fórmulas, tabelas, mídia, detalhes, mapas, referências, âncoras, custom emoji e botões. Undo/redo e seleção pertencem ao `EditorState` do ProseMirror, não a snapshots de DOM.
+
+Documentos antigos `schema: 1 / format: rich_html` são migrados para `schema: 2 / format: semantic` ao carregar. Revisões antigas também são convertidas. O formato `.rmdtxtml` schema 2 armazena `content.model`, não HTML.
+
+## Build
+
+`docs/editor.js` é um artefato gerado e não é versionado. A fonte do editor está em `client/editor.mjs`.
+
+```bash
+npm install
+npm run build
+npm test
+```
+
+O build usa esbuild e versões fixadas dos módulos ProseMirror. O Docker compila o editor antes de executar os gates Node e Playwright; a imagem final recebe apenas o bundle produzido pelo estágio de QA.
+
+## Fronteiras de produção
+
+O cliente não escolhe `chat_id`. Após validar `Telegram.WebApp.initData`, o servidor entrega `destinationId` autorizado e resolve internamente o destino antes de `sendRichMessage`.
+
+Web → Telegram transfere duas representações com responsabilidades diferentes:
+
+- `semantic`: continuidade exata do documento editável;
+- `html`: representação Rich HTML validada para publicação/compatibilidade.
+
+Transferências antigas sem modelo semântico continuam importáveis por migração HTML.
 
 ## Persistência
 
-O backend usa automaticamente `RAILWAY_VOLUME_MOUNT_PATH` quando um Railway Volume está anexado. Em produção durável, monte um volume em `/data`.
+O frontend usa IndexedDB com fallback local. O backend usa SQLite e detecta automaticamente `RAILWAY_VOLUME_MOUNT_PATH`.
 
-Sem volume o serviço continua funcional, mas SQLite fica no filesystem efêmero do container; `GET /api/health` expõe `storage.persistent` para tornar isso observável.
+Para persistência durável no Railway, um Volume deve ser montado em `/data`. Sem volume, o SQLite continua funcional, mas seu estado não sobrevive à substituição do container. `GET /api/health` expõe `storage.persistent`.
 
-## Configuração
+## Segurança
 
-Obrigatórias no ambiente atual:
+- validação HMAC e expiração de `initData` no servidor;
+- backend same-origin, sem override via localStorage;
+- destinos opacos resolvidos server-side;
+- CORS/origin checks, limites de corpo e rate limiting;
+- tokens de transferência expiram e têm claim atômico;
+- envio idempotente por `requestId`, com estado `uncertain` para falha de transporte;
+- timeout nas chamadas à Bot API;
+- modelo semântico valida estrutura e atributos antes de renderizar;
+- Rich HTML é validado novamente no backend antes de publicação.
 
-- `BOT_TOKEN`
-- `APP_URL`
-- `ALLOWED_ORIGINS`
-- `INIT_DATA_MAX_AGE`
-- `SEND_SCOPE`
-- `TRANSFER_TTL_SECONDS`
+## Gate
 
-Operação:
+O gate obrigatório executa:
 
-- `TRANSFER_RATE_LIMIT`
-- `CLAIM_RATE_LIMIT`
-- `SEND_RATE_LIMIT`
-- `APP_VERSION`
+1. build do bundle semântico;
+2. `node --check`;
+3. testes Node;
+4. Playwright/Chromium;
+5. somente então cria o marcador exigido pela imagem final.
 
-Destinos adicionais podem ser declarados por `AUTHORIZED_DESTINATIONS` como JSON de objetos `{"label":"...","chat_id":"..."}`; `ALLOWED_CHAT_IDS` permanece aceito para uma lista simples server-side.
-
-## Gate de release
-
-O estágio de QA executa `node --check`, todos os testes Node e Playwright/Chromium. A imagem de runtime só pode ser construída depois que esse estágio cria o marcador `/tmp/rmdtxtml-qa-passed`. Railway usa `/api/health` como healthcheck.
-
-## Release
-
-Versão atual: `1.1.0-rc.1`.
+Railway usa `/api/health` como healthcheck.
