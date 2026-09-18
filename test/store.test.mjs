@@ -8,10 +8,11 @@ import {Store} from '../src/store.mjs';
 test('SQLite store claims a transfer exactly once',()=>{
   const store=new Store({env:{},dbPath:':memory:'});
   try{
-    store.createTransfer({token:'a'.repeat(32),html:'<p>x</p>',expiresAt:Date.now()+60_000});
+    const semantic={schema:2,format:'semantic',model:{type:'doc',content:[{type:'paragraph'}]}};
+    store.createTransfer({token:'a'.repeat(32),html:'<p>x</p>',semantic,expiresAt:Date.now()+60_000});
     const first=store.claimTransfer('a'.repeat(32));
     const second=store.claimTransfer('a'.repeat(32));
-    assert.equal(first.html,'<p>x</p>');
+    assert.equal(first.html,'<p>x</p>');assert.deepEqual(first.semantic,semantic);
     assert.equal(second,null)
   }finally{store.close()}
 });
