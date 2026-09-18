@@ -40,6 +40,7 @@ test('schema 1 rich_html migrates once into semantic model',async()=>{
   const store=new RMD.DocumentStore(),loaded=await store.load({normalizeModel,migrateHtml});
   assert.equal(loaded.migrated,true);assert.equal(loaded.doc.schema,2);assert.equal(loaded.doc.format,'semantic');
   assert.deepEqual(loaded.doc.content.model,model('Legado'));
+  assert.equal(loaded.doc.migration.fromSchema,1);assert.equal(loaded.doc.migration.original.content.html,'<p>Legado</p>');
   assert.deepEqual(loaded.doc.revisions[0].model,model('Anterior'));
   assert.equal(localStorage.getItem('rmdtxtml-document-v1'),null);
   assert.ok(localStorage.getItem('rmdtxtml-document-v2'))
