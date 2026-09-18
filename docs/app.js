@@ -116,9 +116,25 @@ function run(command){const map={bold:'strong',italic:'em',underline:'u',strikeT
 function promptHttp(label,initial='https://'){const v=prompt(label,initial);if(v===null)return null;if(!/^https?:\/\//i.test(v)){say('Use uma URL HTTP ou HTTPS');return null}return v}
 function safeName(value){return String(value||'').trim().replace(/[^A-Za-z0-9_-]/g,'-').replace(/-+/g,'-').slice(0,64)}
 
-document.addEventListener('pointerdown',e=>{if(e.target.closest('.bar,.drawer'))core.remember()},{capture:true});
-$('[data-cmd]').forEach(b=>b.addEventListener('click',()=>run(b.dataset.cmd)));
-$('#block').addEventListener('change',e=>core.block(e.target.value));
+const formatButtons=[
+  ['[data-cmd="bold"]','strong'],['[data-cmd="italic"]','em'],['[data-cmd="underline"]','u'],
+  ['[data-cmd="strikeThrough"]','s'],['#spoiler','tg-spoiler'],['#code','code'],['#mark','mark'],['#link','a']
+];
+function syncEditorUi(){
+  const r=core.range();if(!r)return;
+  for(const[selector,tag]of formatButtons)for(const b of $(selector)){
+    const active=!r.collapsed&&core.hasFormat(tag,r);
+    b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active))
+  }
+  const block=core.topBlock(r.startContainer),tag=block?.tagName?.toLowerCase()||'p';
+  const value=/^(p|h[1-6]|footer)$/.test(tag)?tag:'p';
+  $('#block').value=value;$('#blockLabel').textContent=value==='p'?'P':value==='footer'?'F':value.toUpperCase()
+}
+
+document.addEventListener('selectionchange',()=>{if(core.ownsSelection())syncEditorUi()});
+document.addEventListener('pointerdown',e=>{if(e.target.closest('.bar,.drawer,.bottom'))core.remember()},{capture:true});
+$('[data-cmd]').forEach(b=>{if(!b.hasAttribute('aria-pressed'))b.setAttribute('aria-pressed','false');b.addEventListener('click',()=>{run(b.dataset.cmd);queueMicrotask(syncEditorUi)})});
+$('#block').addEventListener('change',e=>{core.block(e.target.value);queueMicrotask(syncEditorUi)});
 $('#link').onclick=()=>{const r=core.range(),text=r?.toString()||'',u=prompt('URL','https://t.me/');if(!u)return;if(!validHref(u))return say('URL não suportada');if(r&&!r.collapsed)wrap('a',{href:u});else insertHtml(`<a href="${esc(u)}">${esc(text||'Telegram')}</a>`)};
 $('#code').onclick=()=>wrap('code');
 $('#spoiler').onclick=()=>wrap('tg-spoiler');
@@ -192,7 +208,7 @@ const actions={
   reset:async()=>{if(confirm('Apagar o documento atual e iniciar um documento vazio?')){doc=await store.reset({html:'<p><br></p>',sanitize:sanitizeRichHtml});rtl=false;skipEntityDetection=false;core.setHtml(doc.content.html);applyOptions();updateStatus('Novo documento')}} ,
   server:()=>{const old=platform.api(),u=prompt('URL HTTPS do backend',old);if(u!==null&&/^https:\/\//i.test(u)){localStorage.setItem('rmdtxtml-api-v1',u.replace(/\/+$/,''));say('Servidor salvo')}}
 };
-$('[data-action]').forEach(b=>b.onclick=()=>{drawer.classList.remove('open');if(b.dataset.action==='mark')return wrap('mark');actions[b.dataset.action]?.()});
+$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();if(b.dataset.action==='mark')return wrap('mark');actions[b.dataset.action]?.()});
 
 $('#file').onchange=async e=>{
   const f=e.target.files?.[0];if(!f)return;
