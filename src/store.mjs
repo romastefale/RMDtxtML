@@ -65,7 +65,7 @@ export class Store{
       pruneSends:this.db.prepare("DELETE FROM sends WHERE created_at<? AND state='done'")
     }
   }
-  health(){return{driver:'sqlite',persistent:this.persistent,path:this.path}}
+  health(){return{driver:'sqlite',persistent:this.persistent}}
   close(){this.db.close()}
   prune(now=Date.now()){
     this.q.pruneTransfers.run(now,now-3600_000);
