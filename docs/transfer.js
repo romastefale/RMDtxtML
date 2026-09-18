@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const platform=RMD.platform,tg=platform.tg,send=document.querySelector('#send');
 if(!send)return;
-const setBusy=(busy,label)=>{send.disabled=busy;if(label)send.textContent=label};
+const setBusy=(busy,label)=>{if(platform.isTelegram())platform.setMain({text:label||'Enviar',visible:true,enabled:!busy,busy,onClick:typeof sendMessage==='function'?sendMessage:undefined});else{send.disabled=busy;if(label)send.textContent=label}};
 async function claim(){
   await RMD.ready;
   const token=platform.startParam();
