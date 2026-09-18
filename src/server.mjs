@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {readFile,stat} from 'node:fs/promises';
 import {Store} from './store.mjs';
-import {publicDestinations,resolveDestination,telegramCall,validateInitData,validateRichHtml} from './telegram.mjs';
+import {publicDestinations,resolveDestination,telegramCall,validateInitData,validateRichHtml,validateRichMessage} from './telegram.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../docs');
 const version=process.env.APP_VERSION||'1.1.0-rc.1';
@@ -118,7 +118,8 @@ async function send(req,res,{token,env,fetchImpl,headers,data}){
   if(!validRequestId(requestId))return json(res,400,{ok:false,error:'requestId inválido'},headers);
   const chatId=resolveDestination(input.destinationId,validated,env,token);
   if(!chatId)return json(res,403,{ok:false,error:'Destino não autorizado para esta Mini App'},headers);
-  const checked=validateRichHtml(input.html);
+  const legacy=input.richMessage===undefined&&typeof input.html==='string'?{html:input.html,is_rtl:input.isRtl===true,skip_entity_detection:input.skipEntityDetection===true}:input.richMessage;
+  const checked=validateRichMessage(legacy);
   if(!checked.ok)return json(res,400,{ok:false,error:`Conteúdo inválido: ${checked.error}`},headers);
 
   const previous=data.sendState(userId,requestId);
@@ -130,9 +131,7 @@ async function send(req,res,{token,env,fetchImpl,headers,data}){
     return json(res,409,{ok:false,error:'Este envio já está em processamento',requestId},headers)
   }
 
-  const richMessage={html:checked.html};
-  if(input.isRtl===true)richMessage.is_rtl=true;
-  if(input.skipEntityDetection===true)richMessage.skip_entity_detection=true;
+  const richMessage=checked.richMessage;
   try{
     const result=await telegramCall(token,'sendRichMessage',{chat_id:chatId,rich_message:richMessage,disable_notification:input.disableNotification===true,protect_content:input.protectContent===true},{fetchImpl});
     data.completeSend(userId,requestId,result.result);

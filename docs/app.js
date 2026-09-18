@@ -18,6 +18,8 @@ function syncTheme(){const dark=platform.isTelegram()?platform.colorScheme()==='
 function say(message){toast.textContent=message;toast.classList.add('show');clearTimeout(say.t);say.t=setTimeout(()=>toast.classList.remove('show'),2200)}
 function validHref(v){return /^(#|https?:|mailto:|tel:|tg:\/\/user\?id=)/i.test(v)}
 function currentHtml(){return core.html()}
+function renderCurrent(){return core.render({isRtl:rtl,skipEntityDetection})}
+function modelOptions(){return{normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h),migrateModel:(m,v)=>core.migrateModel(m,v)}}
 function metrics(){const s=core.stats();return{html:currentHtml(),text:s.text,blocks:s.blocks,empty:s.empty}}
 function updateStatus(prefix=''){const m=metrics();status.textContent=`${prefix?prefix+' · ':''}${m.text.toLocaleString('pt-BR')}/${MAX_TEXT.toLocaleString('pt-BR')} caracteres · ${m.blocks} blocos`;status.classList.toggle('danger',m.text>MAX_TEXT)}
 function syncDoc(){
@@ -30,7 +32,7 @@ function syncDoc(){
 async function persistDocument({checkpoint=false,label='Salvo'}={}){
   if(!doc)return null;
   syncDoc();
-  doc=await store.save(doc,{checkpoint,normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
+  doc=await store.save(doc,{checkpoint,...modelOptions()});
   platform.dirty(false);document.documentElement.dataset.dirty='false';updateStatus(label);
   return doc
 }
@@ -38,7 +40,7 @@ function schedulePersist(){
   clearTimeout(saveTimer);
   saveTimer=setTimeout(()=>{persistDocument({label:'Salvo automaticamente'}).catch(()=>updateStatus('Falha ao salvar'))},700)
 }
-function dirty(){sendRequestId='';platform.dirty(true);document.documentElement.dataset.dirty='true';updateStatus('Não salvo');queueMicrotask(syncEditorUi);if(doc)schedulePersist()}
+function dirty(){sendRequestId='';if(doc?.source)doc.source.edited=true;platform.dirty(true);document.documentElement.dataset.dirty='true';updateStatus('Não salvo');queueMicrotask(syncEditorUi);if(doc)schedulePersist()}
 const core=new RMD.Editor(ed,{change:dirty});RMD.editor=core;
 const menuIcons={
   ul:'list',ol:'list',task:'list',quote:'quote',expandable:'quote',pullquote:'quote',details:'file',pre:'code',divider:'text',table:'table',
@@ -166,7 +168,7 @@ const actions={
   export:()=>{syncDoc();const blob=new Blob([RMD.exportDocument(doc)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='RMDtxtML.rmdtxtml';a.click();URL.revokeObjectURL(url)},
   exporthtml:()=>{const h=currentHtml(),blob=new Blob([h],{type:'text/html'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='RMDtxtML-rich-message.html';a.click();URL.revokeObjectURL(url)},
   import:()=>$('#file').click(),
-  revision:async()=>{if(!doc?.revisions?.length)return say('Nenhuma revisão salva');const list=doc.revisions.slice(-10).reverse(),choice=prompt('Revisão para restaurar:\n'+list.map(r=>r.revision+' · '+new Date(r.at).toLocaleString('pt-BR')).join('\n'),String(list[0].revision));if(choice===null)return;const rev=Number(choice);if(!Number.isSafeInteger(rev))return say('Revisão inválida');try{doc=await store.restore(doc,rev,{normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;core.setModel(doc.content.model,{history:false});applyOptions();updateStatus('Revisão restaurada');say('Revisão restaurada')}catch{say('Revisão não encontrada')}},
+  revision:async()=>{if(!doc?.revisions?.length)return say('Nenhuma revisão salva');const list=doc.revisions.slice(-10).reverse(),choice=prompt('Revisão para restaurar:\n'+list.map(r=>r.revision+' · '+new Date(r.at).toLocaleString('pt-BR')).join('\n'),String(list[0].revision));if(choice===null)return;const rev=Number(choice);if(!Number.isSafeInteger(rev))return say('Revisão inválida');try{doc=await store.restore(doc,rev,modelOptions());rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;core.setModel(doc.content.model,{history:false});applyOptions();updateStatus('Revisão restaurada');say('Revisão restaurada')}catch{say('Revisão não encontrada')}},
   reset:async()=>{if(confirm('Apagar o documento atual e iniciar um documento vazio?')){doc=await store.reset({model:core.emptyModel(),normalizeModel:m=>core.normalizeModel(m)});rtl=false;skipEntityDetection=false;core.setModel(doc.content.model,{history:false});applyOptions();updateStatus('Novo documento')}}
 };
 $$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();actions[b.dataset.action]?.();queueMicrotask(syncEditorUi)});
@@ -178,7 +180,7 @@ $('#file').onchange=async e=>{
     if(f.name.toLowerCase().endsWith('.rmdtxtml')||f.type==='application/json'){
       doc=RMD.importDocument(text,{normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
       core.setModel(doc.content.model,{history:false});rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;applyOptions();
-      doc=await store.save(doc,{checkpoint:true,normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
+      doc=await store.save(doc,{checkpoint:true,...modelOptions()});
       updateStatus('Documento importado');say('Documento RMDtxtML importado')
     }else{
       core.setHtml(text,{history:false});syncDoc();doc=await store.save(doc,{checkpoint:true,normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
@@ -190,7 +192,7 @@ $('#file').onchange=async e=>{
 $('#save').onclick=async()=>{try{await persistDocument({checkpoint:true,label:'Salvo'});say('Checkpoint salvo')}catch{updateStatus('Falha ao salvar');say('Não foi possível salvar')}};
 $('#previewBtn').onclick=()=>{
   if(previewOpen)return closePreview();
-  platform.keyboard();previewOpen=true;$('#preview').innerHTML=currentHtml();$('#preview').dir=rtl?'rtl':'ltr';
+  platform.keyboard();previewOpen=true;const rendered=renderCurrent();$('#preview').innerHTML=rendered.previewHtml;$('#preview').dir=rtl?'rtl':'ltr';$('#previewMechanism').textContent=rendered.mechanism;
   $('#previewWrap').classList.add('open');$('#editWrap').hidden=true;$('#previewBtn').innerHTML='<svg><use href="#i-edit"/></svg>';$('#previewBtn').setAttribute('aria-pressed','true');$('#previewBtn').setAttribute('aria-label','Voltar à edição');
   updateStatus('Prévia');syncBack()
 };
@@ -205,7 +207,7 @@ async function sendMessage(){
   if(!sendRequestId)sendRequestId=crypto.randomUUID?.()||('send-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
   status.textContent='Enviando…';platform.setMain({text:'Enviando…',visible:true,enabled:false,busy:true,onClick:sendMessage});
   try{
-    await platform.json('/api/send',{method:'POST',auth:true,body:{requestId:sendRequestId,destinationId,html:m.html,isRtl:rtl,skipEntityDetection}});
+    const rendered=renderCurrent();await platform.json('/api/send',{method:'POST',auth:true,body:{requestId:sendRequestId,destinationId,richMessage:rendered.richMessage}});
     sendRequestId='';platform.setMain({text:'Enviar',visible:true,enabled:true,busy:false,onClick:sendMessage});updateStatus('Enviado');say('Rich Message enviada');platform.haptic('success');
   }catch(error){platform.setMain({text:'Enviar',visible:true,enabled:true,busy:false,onClick:sendMessage});updateStatus(error?.info?.uncertain?'Resultado indeterminado':'Falha');say(error instanceof Error?error.message:'Falha no envio');platform.haptic('error')}
 }
@@ -220,7 +222,7 @@ function applyOptions(){
   $('[data-action="entities"]')?.setAttribute('aria-pressed',String(!skipEntityDetection))
 }
 async function initDocument(){
-  const loaded=await store.load({initialModel:core.model(),normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
+  const loaded=await store.load({initialModel:core.model(),...modelOptions()});
   doc=loaded.doc;rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;
   core.setModel(doc.content.model,{history:false});applyOptions();platform.dirty(false);document.documentElement.dataset.dirty='false';syncBack();syncEditorUi();
   updateStatus(loaded.migrated?'Documento migrado para modelo semântico':'Pronto');
@@ -269,7 +271,7 @@ const application={
     }
   },
   async adoptTransfer(transfer){
-    doc=RMD.adoptTransferDocument(doc,transfer,{normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});
+    doc=RMD.adoptTransferDocument(doc,transfer,modelOptions());
     rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;
     core.setModel(doc.content.model,{history:false});applyOptions();
     doc=await store.save(doc,{checkpoint:true,normalizeModel:m=>core.normalizeModel(m),migrateHtml:h=>core.parseHtml(h)});

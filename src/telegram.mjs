@@ -51,6 +51,84 @@ function richStructure(html){
 }
 function richTextLength(html){return [...html.replace(/<[^>]*>/g,'').replace(/&(?:#\d+|#x[\da-f]+|lt|gt|amp|quot|apos|nbsp|hellip|mdash|ndash|lsquo|rsquo|ldquo|rdquo);/gi,'x')].length}
 export function validateRichHtml(html){if(typeof html!=='string')return{ok:false,error:'html_required'};const trimmed=html.trim();if(!trimmed)return{ok:false,error:'empty_message'};if(richTextLength(trimmed)>32768)return{ok:false,error:'text_too_long'};if(/<\s*(script|iframe|object|embed|style|link|meta)\b/i.test(trimmed))return{ok:false,error:'unsafe_tag'};if(/<[^>]+\son[a-z]+\s*=/i.test(trimmed))return{ok:false,error:'unsafe_attribute'};if(/<[^>]+\b(?:href|src|url)\s*=\s*(['"]?)\s*javascript:/i.test(trimmed))return{ok:false,error:'unsafe_url'};const structure=richStructure(trimmed);if(!structure.ok)return structure;return{ok:true,html:trimmed,...structure}}
+
+function richTextCount(value){
+  if(typeof value==='string')return[...value].length;
+  if(Array.isArray(value))return value.reduce((n,x)=>n+richTextCount(x),0);
+  if(!value||typeof value!=='object')return 0;
+  if(value.type==='custom_emoji')return[...String(value.alternative_text||'')].length;
+  if(value.type==='mathematical_expression')return[...String(value.expression||'')].length;
+  if(value.type==='anchor')return 0;
+  if(value.type==='button')return richTextCount(value.button?.text);
+  return richTextCount(value.text)
+}
+function safeHttp(value){return /^https?:\/\//i.test(String(value||''))}
+function inspectBlocks(blocks){
+  if(!Array.isArray(blocks)||!blocks.length)return{ok:false,error:'blocks_required'};
+  let count=0,depth=0,media=0,text=0;
+  const walk=(items,level)=>{
+    if(level>16)throw new Error('nesting_too_deep');
+    depth=Math.max(depth,level);
+    for(const block of items){
+      if(!block||typeof block!=='object')throw new Error('invalid_block');
+      count++;if(count>500)throw new Error('too_many_blocks');
+      const type=String(block.type||'');
+      if(!['paragraph','heading','pre','footer','divider','mathematical_expression','anchor','list','blockquote','expandable_blockquote','pullquote','collage','slideshow','table','details','map','buttons','animation','audio','document','photo','video','voice_note'].includes(type))throw new Error('unsupported_block');
+      text+=richTextCount(block.text)+richTextCount(block.summary)+richTextCount(block.caption?.text)+richTextCount(block.caption?.credit)+richTextCount(block.credit);
+      if(type==='heading'&&(!Number.isInteger(block.size)||block.size<1||block.size>6))throw new Error('invalid_heading');
+      if(type==='list'){
+        if(!Array.isArray(block.items)||!block.items.length)throw new Error('invalid_list');
+        for(const item of block.items){
+          if(item?.type&&!['1','a','A','i','I'].includes(item.type))throw new Error('invalid_list_type');
+          if(item?.value!==undefined&&!Number.isSafeInteger(item.value))throw new Error('invalid_list_value');
+          walk(item?.blocks||[],level+1)
+        }
+      }
+      if(type==='blockquote')walk(block.blocks||[],level+1);
+      if(type==='details')walk(block.blocks||[],level+1);
+      if(type==='collage'||type==='slideshow')walk(block.blocks||[],level+1);
+      if(type==='table'){
+        if(!Array.isArray(block.cells)||!block.cells.length)throw new Error('invalid_table');
+        for(const row of block.cells){
+          if(!Array.isArray(row)||row.length>20)throw new Error('too_many_table_columns');
+          for(const cell of row){text+=richTextCount(cell?.text);if(cell?.colspan!==undefined&&(!Number.isInteger(cell.colspan)||cell.colspan<1||cell.colspan>20))throw new Error('invalid_table_span')}
+        }
+      }
+      if(type==='map'){
+        const loc=block.location||{},w=Number(block.width||0),h=Number(block.height||0);
+        if(!Number.isFinite(loc.latitude)||loc.latitude<-90||loc.latitude>90||!Number.isFinite(loc.longitude)||loc.longitude<-180||loc.longitude>180)throw new Error('invalid_map');
+        if(block.zoom!==undefined&&(!Number.isInteger(block.zoom)||block.zoom<0||block.zoom>24))throw new Error('invalid_map');
+        if(w<0||h<0||w>10000||h>10000||(w&&h&&(w+h>10000||Math.max(w/h,h/w)>20)))throw new Error('invalid_map')
+      }
+      if(type==='buttons'){
+        if(!Array.isArray(block.buttons)||block.buttons.length<1||block.buttons.length>8)throw new Error('invalid_buttons');
+        for(const button of block.buttons){text+=richTextCount(button?.text);const keys=['url','callback_data','web_app','login_url','switch_inline_query','switch_inline_query_current_chat','switch_inline_query_chosen_chat','copy_text','disabled'].filter(k=>button?.[k]!==undefined);if(keys.length!==1)throw new Error('invalid_button');if(button.style&&!['danger','success','primary','link'].includes(button.style))throw new Error('invalid_button_style')}
+      }
+      if(['photo','video','audio','document','animation','voice_note'].includes(type)){
+        media++;if(media>50)throw new Error('too_many_media');
+        const field=type==='photo'?'photo':type==='voice_note'?'voice_note':type;
+        if(!safeHttp(block[field]?.media))throw new Error('invalid_media')
+      }
+    }
+  };
+  try{walk(blocks,1)}catch(error){return{ok:false,error:error.message||'invalid_blocks'}}
+  if(text>32768)return{ok:false,error:'text_too_long'};
+  return{ok:true,blocks,count,depth,media,text}
+}
+export function validateRichMessage(input){
+  if(!input||typeof input!=='object')return{ok:false,error:'rich_message_required'};
+  const modes=['html','markdown','blocks'].filter(key=>input[key]!==undefined);
+  if(modes.length!==1)return{ok:false,error:'exactly_one_rich_representation_required'};
+  const common={...(input.is_rtl===true?{is_rtl:true}:{}),...(input.skip_entity_detection===true?{skip_entity_detection:true}:{})};
+  if(modes[0]==='html'){const checked=validateRichHtml(input.html);return checked.ok?{...checked,richMessage:{html:checked.html,...common}}:checked}
+  if(modes[0]==='markdown'){
+    if(typeof input.markdown!=='string'||!input.markdown.trim())return{ok:false,error:'markdown_required'};
+    if([...input.markdown].length>32768)return{ok:false,error:'text_too_long'};
+    return{ok:true,richMessage:{markdown:input.markdown,...common}}
+  }
+  const checked=inspectBlocks(input.blocks);return checked.ok?{...checked,richMessage:{blocks:input.blocks,...common}}:checked
+}
+
 export async function telegramCall(token,method,body,{fetchImpl=fetch,timeoutMs=15000}={}){
   let response;
   try{
