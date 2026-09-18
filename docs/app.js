@@ -105,10 +105,10 @@ const menuIcons={
   reference:'file',anchor:'link',time:'text',emoji:'media',button:'button',rtl:'settings',entities:'settings',
   export:'file',exporthtml:'code',import:'file',revision:'file',server:'settings',reset:'settings'
 };
-for(const b of $('[data-action]')){
+for(const b of $$('[data-action]')){
   const id=menuIcons[b.dataset.action];if(id&&!b.querySelector('svg'))b.insertAdjacentHTML('afterbegin',`<svg class="menuIcon" aria-hidden="true"><use href="#i-${id}"/></svg>`)
 }
-for(const b of $('button[title]:not([aria-label])'))b.setAttribute('aria-label',b.title);
+for(const b of $$('button[title]:not([aria-label])'))b.setAttribute('aria-label',b.title);
 function insertHtml(html){core.insert(html)}
 function addBlock(html){core.blockHtml(html)}
 function wrap(tag,attrs={}){if(!core.format(tag,attrs))say('Selecione um trecho primeiro')}
@@ -122,7 +122,7 @@ const formatButtons=[
 ];
 function syncEditorUi(){
   const r=core.range();if(!r)return;
-  for(const[selector,tag]of formatButtons)for(const b of $(selector)){
+  for(const[selector,tag]of formatButtons)for(const b of $$(selector)){
     const active=!r.collapsed&&core.hasFormat(tag,r);
     b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active))
   }
@@ -133,7 +133,7 @@ function syncEditorUi(){
 
 document.addEventListener('selectionchange',()=>{if(core.ownsSelection())syncEditorUi()});
 document.addEventListener('pointerdown',e=>{if(e.target.closest('.bar,.drawer,.bottom'))core.remember()},{capture:true});
-$('[data-cmd]').forEach(b=>{if(!b.hasAttribute('aria-pressed'))b.setAttribute('aria-pressed','false');b.addEventListener('click',()=>{run(b.dataset.cmd);queueMicrotask(syncEditorUi)})});
+$$('[data-cmd]').forEach(b=>{if(!b.hasAttribute('aria-pressed'))b.setAttribute('aria-pressed','false');b.addEventListener('click',()=>{run(b.dataset.cmd);queueMicrotask(syncEditorUi)})});
 $('#block').addEventListener('change',e=>{core.block(e.target.value);queueMicrotask(syncEditorUi)});
 $('#link').onclick=()=>{const r=core.range(),text=r?.toString()||'',u=prompt('URL','https://t.me/');if(!u)return;if(!validHref(u))return say('URL não suportada');if(r&&!r.collapsed)wrap('a',{href:u});else insertHtml(`<a href="${esc(u)}">${esc(text||'Telegram')}</a>`)};
 $('#code').onclick=()=>wrap('code');
@@ -167,7 +167,7 @@ drawer.onclick=e=>{if(e.target===drawer)closeDrawer()};
 drawer.addEventListener('keydown',e=>{
   if(e.key==='Escape'){e.preventDefault();closeDrawer();return}
   if(e.key!=='Tab')return;
-  const list=$('.sheet button:not(:disabled),.sheet [href],.sheet select:not(:disabled),.sheet input:not(:disabled),.sheet [tabindex]:not([tabindex="-1"])').filter(x=>x.offsetParent!==null);
+  const list=$$('.sheet button:not(:disabled),.sheet [href],.sheet select:not(:disabled),.sheet input:not(:disabled),.sheet [tabindex]:not([tabindex="-1"])').filter(x=>x.offsetParent!==null);
   if(!list.length)return;const first=list[0],last=list.at(-1);
   if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}
   else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}
