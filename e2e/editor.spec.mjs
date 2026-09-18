@@ -347,6 +347,7 @@ test('TXT import stays literal while Markdown import is interpreted and original
   await expect(page.locator('#editor > p')).toHaveCount(2);await expect(page.locator('#editor h1,#editor strong')).toHaveCount(0);
   let source=await page.evaluate(()=>RMD.application.document().source);
   expect(source.kind).toBe('text');expect(source.originalText).toContain('**não é negrito**');expect(source.edited).toBe(false);
+  await page.locator('#more').click();
   const [original]=await Promise.all([page.waitForEvent('download'),page.locator('[data-action="exportsource"]').click()]);
   const stream=await original.createReadStream(),chunks=[];for await(const chunk of stream)chunks.push(chunk);
   expect(original.suggestedFilename()).toBe('literal.txt');expect(Buffer.concat(chunks).toString('utf8')).toBe('# Não é título\n**não é negrito**');
