@@ -14,6 +14,7 @@ const themeQuery=matchMedia('(prefers-color-scheme: dark)');
 let rtl=false;
 let skipEntityDetection=false;
 
+const ALIASES={B:'STRONG',I:'EM',INS:'U',STRIKE:'S',DEL:'S'};
 const TAGS=new Set('A B STRONG I EM U INS S STRIKE DEL CODE PRE MARK SUB SUP TG-SPOILER TG-REFERENCE TG-EMOJI TG-TIME TG-MATH H1 H2 H3 H4 H5 H6 P FOOTER HR UL OL LI INPUT BR BLOCKQUOTE CITE ASIDE IMG VIDEO AUDIO TG-DOCUMENT FIGURE FIGCAPTION TG-MAP TG-COLLAGE TG-SLIDESHOW TABLE CAPTION THEAD TBODY TR TH TD DETAILS SUMMARY TG-MATH-BLOCK TG-BUTTON TG-BUTTON-ROW'.split(' '));
 const ATTRS={
   A:new Set(['href','name']),CODE:new Set(['class']),OL:new Set(['start','type','reversed']),LI:new Set(['value','type']),INPUT:new Set(['type','checked']),
@@ -53,8 +54,8 @@ function sanitizeRichHtml(input){
   function copy(node){
     if(node.nodeType===Node.TEXT_NODE)return document.createTextNode(node.nodeValue||'');
     if(node.nodeType!==Node.ELEMENT_NODE)return document.createDocumentFragment();
-    const tag=node.tagName.toUpperCase();
-    if(!TAGS.has(tag)){
+    const raw=node.tagName.toUpperCase(),tag=ALIASES[raw]||raw;
+    if(!TAGS.has(raw)){
       const f=document.createDocumentFragment();
       [...node.childNodes].forEach(child=>f.append(copy(child)));
       return f;
