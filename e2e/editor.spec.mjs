@@ -70,10 +70,10 @@ test('subscript applies and clear-format affects only the selected range',async(
   expect(await page.evaluate(()=>window.RMD.editor.html())).toBe('<p><strong>alpha </strong>beta<strong> gamma</strong></p>')
 });
 
-test('link prompt preserves selection and block conversion stays in place',async({page})=>{
+test('link editor preserves selection and block conversion stays in place',async({page})=>{
   await web(page);await setEditor(page,'<p>alpha beta gamma</p>');await selectText(page,'beta');
-  page.once('dialog',dialog=>dialog.accept('https://example.com/x'));
-  await page.locator('#link').click();
+  await page.locator('#link').click();await expect(page.locator('#inputDialog')).toHaveJSProperty('open',true);
+  await page.locator('#inputDialogValue').fill('https://example.com/x');await page.locator('#inputDialogOk').click();
   await expect(page.locator('#editor a')).toHaveText('beta');
   await expect(page.locator('#editor a')).toHaveAttribute('href','https://example.com/x');
   await selectText(page,'alpha');
@@ -409,8 +409,9 @@ test('traditional inline keyboard survives preview, Web handoff and Telegram sen
 
 test('document bar persists name and reports local saving states',async({page})=>{
   await web(page);await expect(page.locator('#docName')).toHaveText('Sem título');await expect(page.locator('#saveState')).toHaveText('Salvo');
-  page.once('dialog',dialog=>dialog.accept('Mensagem cliente'));
-  await page.locator('#docName').click();await expect(page.locator('#docName')).toHaveText('Mensagem cliente');
+  await page.locator('#docName').click();await expect(page.locator('#inputDialog')).toHaveJSProperty('open',true);
+  await page.locator('#inputDialogValue').fill('Mensagem cliente');await page.locator('#inputDialogOk').click();
+  await expect(page.locator('#docName')).toHaveText('Mensagem cliente');
   await expect(page.locator('#saveState')).toContainText(/Alterações locais|Salvando|Salvo/);
   await expect.poll(()=>page.locator('#saveState').textContent()).toBe('Salvo');
   await page.reload();await waitReady(page);await expect(page.locator('#docName')).toHaveText('Mensagem cliente')
@@ -423,4 +424,16 @@ test('H1 H2 H3 are distinct and preview switch does not mutate the document',asy
   await page.locator('#block').selectOption('h3');await expect(page.locator('#editor > h3')).toHaveText('Título');
   const formatted=await page.evaluate(()=>RMD.editor.html());expect(formatted).not.toBe(before);
   await page.locator('#previewTab').click();await page.locator('#editTab').click();expect(await page.evaluate(()=>RMD.editor.html())).toBe(formatted)
+});
+
+
+test('product forms use the in-app accessible dialog instead of native browser prompts',async({page})=>{
+  await web(page);await setEditor(page,'<p>Texto</p>');
+  const nativeDialogs=[];page.on('dialog',dialog=>{nativeDialogs.push(dialog.type());dialog.dismiss()});
+  await selectText(page,'Texto');await page.locator('#link').click();
+  await expect(page.locator('#inputDialog')).toHaveJSProperty('open',true);
+  await expect(page.locator('#inputDialogTitle')).toHaveText('Inserir link');
+  await expect(page.locator('#inputDialogValue')).toBeFocused();
+  await page.keyboard.press('Escape');await expect(page.locator('#inputDialog')).toHaveJSProperty('open',false);
+  expect(nativeDialogs).toEqual([])
 });

@@ -204,6 +204,21 @@ tg-button-row[align="right"]{justify-content:flex-end}
 .previewKeyboard{display:grid;gap:6px;margin-top:16px}
 .previewKeyboardRow{display:flex;gap:6px}
 .previewKeyboard button{flex:1;min-height:40px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit;font-size:13px;font-weight:620;opacity:1}
+.inputDialog{width:min(92vw,440px);max-width:440px;border:0;padding:0;border-radius:16px;background:var(--bg);color:var(--text);box-shadow:0 22px 70px rgba(0,0,0,.26)}
+.inputDialog::backdrop{background:rgba(0,0,0,.48)}
+.inputCard{display:grid;gap:14px;padding:0;margin:0}
+.inputHead{display:flex;align-items:center;justify-content:space-between;min-height:52px;padding:0 8px 0 16px;border-bottom:1px solid var(--hairline)}
+.inputHead strong{font-size:15px;font-weight:680}
+.inputHead button{width:44px;color:var(--muted)}
+.inputField{display:grid;gap:6px;padding:0 16px}
+.inputField span{font-size:12px;font-weight:650;color:var(--muted)}
+.inputField input{width:100%;min-height:46px;border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:0 12px;font-size:16px;outline:0}
+.inputField input:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--softAccent)}
+.inputHelp{margin:-4px 16px 0;color:var(--muted);font-size:12px;line-height:1.4}
+.inputActions{display:flex;justify-content:flex-end;gap:8px;padding:0 16px 16px}
+.inputActions button{min-width:88px;padding:0 14px}
+.inputActions .primaryAction{background:var(--accent);color:var(--accentText);font-weight:680}
+.inputDialog[data-danger="true"] .primaryAction{background:var(--danger);color:#fff}
 .toast{
   position:fixed;left:50%;bottom:max(76px,calc(60px + var(--rmd-content-bottom)));max-width:min(90vw,520px);
   transform:translate(-50%,8px);background:var(--text);color:var(--bg);padding:9px 12px;border-radius:var(--radius);

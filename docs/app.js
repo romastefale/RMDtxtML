@@ -11,6 +11,7 @@ const editTab=$('#editTab');
 const previewTab=$('#previewTab');
 const drawer=$('#drawer');
 const toast=$('#toast');
+const inputDialog=$('#inputDialog'),inputForm=inputDialog.querySelector('form'),inputDialogTitle=$('#inputDialogTitle'),inputDialogLabel=$('#inputDialogLabel'),inputDialogValue=$('#inputDialogValue'),inputDialogHelp=$('#inputDialogHelp'),inputDialogOk=$('#inputDialogOk'),inputDialogCancel=$('#inputDialogCancel'),inputDialogClose=$('#inputDialogClose'),inputField=inputDialog.querySelector('.inputField');
 const MAX_TEXT=32768;
 const themeQuery=matchMedia('(prefers-color-scheme: dark)');
 let rtl=false;
@@ -20,6 +21,31 @@ let doc=null,saveTimer=0,sendRequestId='',destinationId='',sending=false;
 
 function syncTheme(){const dark=platform.isTelegram()?platform.colorScheme()==='dark':themeQuery.matches;document.documentElement.dataset.theme=dark?'dark':'light';document.documentElement.style.colorScheme=dark?'dark':'light'}
 function say(message){toast.textContent=message;toast.classList.add('show');clearTimeout(say.t);say.t=setTimeout(()=>toast.classList.remove('show'),2200)}
+function ask({title='Editar',label='Valor',value='',help='',confirmText='Confirmar',type='text',danger=false,confirmOnly=false}={}){
+  return new Promise(resolve=>{
+    const active=document.activeElement;
+    inputDialogTitle.textContent=title;inputDialogLabel.textContent=label;inputDialogValue.type=type;inputDialogValue.value=String(value??'');
+    inputDialogHelp.textContent=help;inputDialogHelp.hidden=!help;inputDialogOk.textContent=confirmText;inputDialog.dataset.danger=String(danger);inputField.hidden=confirmOnly;
+    let settled=false;
+    const finish=result=>{
+      if(settled)return;settled=true;
+      inputDialog.removeEventListener('cancel',cancel);inputForm.onsubmit=null;inputDialogOk.onclick=null;inputDialogCancel.onclick=null;inputDialogClose.onclick=null;
+      if(inputDialog.open)inputDialog.close();
+      if(active?.isConnected)queueMicrotask(()=>active.focus({preventScroll:true}));
+      resolve(result)
+    };
+    const cancel=e=>{e.preventDefault();finish(null)};
+    inputDialog.addEventListener('cancel',cancel);
+    inputForm.onsubmit=e=>{e.preventDefault();finish(confirmOnly?'yes':inputDialogValue.value)};
+    inputDialogOk.onclick=e=>{e.preventDefault();finish(confirmOnly?'yes':inputDialogValue.value)};
+    inputDialogCancel.onclick=()=>finish(null);inputDialogClose.onclick=()=>finish(null);
+    inputDialog.showModal();
+    requestAnimationFrame(()=>{if(confirmOnly)inputDialogOk.focus();else{inputDialogValue.focus();inputDialogValue.select()}})
+  })
+}
+async function askConfirm(message,{title='Confirmar',confirmText='Confirmar',danger=false}={}){
+  return(await ask({title,help:message,confirmText,danger,confirmOnly:true}))!==null
+}
 function validHref(v){return /^(#|https?:|mailto:|tel:|tg:\/\/user\?id=)/i.test(v)}
 function currentHtml(){return core.html()}
 function renderCurrent(){return core.render({isRtl:rtl,skipEntityDetection})}
@@ -79,7 +105,7 @@ const paragraphSpec=(text='')=>({type:'paragraph',...(text?{content:[textSpec(te
 const insertSpec=spec=>core.insertSpec(spec)
 function wrap(tag,attrs={}){if(!core.format(tag,attrs))say('Selecione um trecho primeiro')}
 function run(command){const map={bold:'strong',italic:'em',underline:'u',strikeThrough:'s'};if(map[command])return wrap(map[command]);if(command==='undo')return core.undo();if(command==='redo')return core.redo()}
-function promptHttp(label,initial='https://'){const v=prompt(label,initial);if(v===null)return null;if(!/^https?:\/\//i.test(v)){say('Use uma URL HTTP ou HTTPS');return null}return v}
+async function promptHttp(label,initial='https://'){const v=await ask({title:'Endereço da mídia',label,value:initial,type:'url'});if(v===null)return null;if(!/^https?:\/\//i.test(v)){say('Use uma URL HTTP ou HTTPS');return null}return v}
 function safeName(value){return String(value||'').trim().replace(/[^A-Za-z0-9_-]/g,'-').replace(/-+/g,'-').slice(0,64)}
 
 const formatButtons=[
@@ -101,7 +127,7 @@ document.addEventListener('selectionchange',()=>{if(core.ownsSelection())syncEdi
 document.addEventListener('pointerdown',e=>{if(e.target.closest('.bar,.drawer,.documentBar'))core.remember()},{capture:true});
 $$('[data-cmd]').forEach(b=>{if(!b.hasAttribute('aria-pressed'))b.setAttribute('aria-pressed','false');b.addEventListener('click',()=>{run(b.dataset.cmd);queueMicrotask(syncEditorUi)})});
 $('#block').addEventListener('change',e=>{core.block(e.target.value);queueMicrotask(syncEditorUi)});
-$('#link').onclick=()=>{const r=core.range(),text=r?.toString()||'',u=prompt('URL','https://t.me/');if(!u)return;if(!validHref(u))return say('URL não suportada');if(r&&!r.collapsed)wrap('a',{href:u});else core.insertText(text||'Telegram',[{type:'link',attrs:{href:u}}])};
+$('#link').onclick=async()=>{const r=core.range(),text=r?.toString()||'',u=await ask({title:'Inserir link',label:'URL',value:'https://t.me/',type:'url'});if(!u)return;if(!validHref(u))return say('URL não suportada');if(r&&!r.collapsed)wrap('a',{href:u});else core.insertText(text||'Telegram',[{type:'link',attrs:{href:u}}])};
 let previewOpen=false,drawerFocus=null;
 const app=$('.app'),sheet=$('.sheet'),more=$('#more');
 function syncBack(){
@@ -159,50 +185,49 @@ function keyboardTelegramPreview(){
   }
   return root
 }
-function keyboardButton(initial={}){
+async function keyboardButton(initial={}){
   const supported=['url','web_app','login_url','switch_inline_query','switch_inline_query_current_chat','switch_inline_query_chosen_chat','copy_text','disabled'];
-  const type=(prompt('Tipo: '+supported.join(', '),initial.type||'url')||'').trim();
-  if(!supported.includes(type)){say('Tipo de teclado não suportado');return null}
-  const text=prompt('Texto do botão',initial.text||'Abrir');if(!text?.trim())return null;
+  const type=(await ask({title:'Botão do teclado',label:'Tipo',value:initial.type||'url',help:supported.join(' · ')})||'').trim();
+  if(!supported.includes(type)){if(type)say('Tipo de teclado não suportado');return null}
+  const text=await ask({title:'Botão do teclado',label:'Texto',value:initial.text||'Abrir'});if(!text?.trim())return null;
   const button={text:text.trim().slice(0,64),type};
-  const style=(prompt('Estilo opcional: danger, success, primary',initial.style||'')||'').trim();
+  const style=(await ask({title:'Botão do teclado',label:'Estilo opcional',value:initial.style||'',help:'danger · success · primary'})||'').trim();
   if(style){if(!['danger','success','primary'].includes(style))return say('Estilo inválido'),null;button.style=style}
   if(type==='url'||type==='web_app'||type==='login_url'){
-    const value=prompt(type==='url'?'URL HTTP/HTTPS ou tg://':'URL HTTPS',initial.url||'https://');
+    const value=await ask({title:'Botão do teclado',label:type==='url'?'URL HTTP/HTTPS ou tg://':'URL HTTPS',value:initial.url||'https://',type:'url'});
     if(value===null)return null;
     if(type==='url'?!/^(https?:\/\/|tg:\/\/)/i.test(value):!/^https:\/\//i.test(value))return say('URL não suportada'),null;
     button.url=value
   }else if(type==='copy_text'){
-    const value=prompt('Texto para copiar',initial.copyText||'Texto');if(value===null||!value)return null;button.copyText=value.slice(0,256)
+    const value=await ask({title:'Botão do teclado',label:'Texto para copiar',value:initial.copyText||'Texto'});if(value===null||!value)return null;button.copyText=value.slice(0,256)
   }else if(type==='switch_inline_query'||type==='switch_inline_query_current_chat'){
-    button.query=prompt('Consulta inline',initial.query||'')||''
+    button.query=await ask({title:'Consulta inline',label:'Consulta',value:initial.query||''})||''
   }else if(type==='switch_inline_query_chosen_chat'){
-    button.query=prompt('Consulta inline',initial.query||'')||'';
-    button.allowUserChats=confirm('Permitir chats privados de usuários?');
-    button.allowBotChats=confirm('Permitir chats com bots?');
-    button.allowGroupChats=confirm('Permitir grupos?');
-    button.allowChannelChats=confirm('Permitir canais?')
+    button.query=await ask({title:'Consulta inline',label:'Consulta',value:initial.query||''})||'';
+    const current=[initial.allowUserChats&&'user',initial.allowBotChats&&'bot',initial.allowGroupChats&&'group',initial.allowChannelChats&&'channel'].filter(Boolean).join(',');
+    const scopes=(await ask({title:'Chats permitidos',label:'Tipos de chat',value:current||'user,group',help:'Use: user, bot, group, channel'})||'').toLowerCase().split(',').map(x=>x.trim());
+    button.allowUserChats=scopes.includes('user');button.allowBotChats=scopes.includes('bot');button.allowGroupChats=scopes.includes('group');button.allowChannelChats=scopes.includes('channel')
   }
   return button
 }
-function manageKeyboard(){
+async function manageKeyboard(){
   if(!doc)return;
   const rows=keyboardButtons(),positions=[];rows.forEach((row,ri)=>row.forEach((button,bi)=>positions.push({ri,bi,button})));
-  const mode=(prompt('Teclado inline: adicionar, editar, remover ou limpar',positions.length?'editar':'adicionar')||'').trim().toLowerCase();
+  const mode=(await ask({title:'Teclado inline',label:'Ação',value:positions.length?'editar':'adicionar',help:'adicionar · editar · remover · limpar'})||'').trim().toLowerCase();
   if(mode==='adicionar'){
-    const button=keyboardButton();if(!button)return;rows.push([button])
+    const button=await keyboardButton();if(!button)return;rows.push([button])
   }else if(mode==='editar'){
     if(!positions.length)return say('Nenhum botão para editar');
-    const choice=Number(prompt('Número do botão:\n'+positions.map((x,i)=>`${i+1}. ${x.button.text}`).join('\n'),'1'))-1;
+    const choice=Number(await ask({title:'Editar botão',label:'Número',value:'1',help:positions.map((x,i)=>`${i+1}. ${x.button.text}`).join(' · ')}))-1;
     if(!Number.isInteger(choice)||!positions[choice])return say('Botão inválido');
-    const target=positions[choice],button=keyboardButton(target.button);if(!button)return;rows[target.ri][target.bi]=button
+    const target=positions[choice],button=await keyboardButton(target.button);if(!button)return;rows[target.ri][target.bi]=button
   }else if(mode==='remover'){
     if(!positions.length)return say('Nenhum botão para remover');
-    const choice=Number(prompt('Número do botão:\n'+positions.map((x,i)=>`${i+1}. ${x.button.text}`).join('\n'),'1'))-1;
+    const choice=Number(await ask({title:'Remover botão',label:'Número',value:'1',help:positions.map((x,i)=>`${i+1}. ${x.button.text}`).join(' · ')}))-1;
     if(!Number.isInteger(choice)||!positions[choice])return say('Botão inválido');
     const target=positions[choice];rows[target.ri].splice(target.bi,1);if(!rows[target.ri].length)rows.splice(target.ri,1)
   }else if(mode==='limpar'){
-    if(!confirm('Remover todo o teclado inline?'))return;rows.length=0
+    if(!await askConfirm('Remover todo o teclado inline?',{title:'Limpar teclado',confirmText:'Remover',danger:true}))return;rows.length=0
   }else return;
   doc.options.inlineKeyboard=RMD.normalizeInlineKeyboard(rows);dirty();say(doc.options.inlineKeyboard.length?'Teclado inline atualizado':'Teclado inline removido')
 }
@@ -222,49 +247,46 @@ const actions={
   quote:()=>insertSpec({type:'blockquote',attrs:{expandable:false},content:[{type:'paragraph',content:[textSpec('Citação '),textSpec('Autor',[{type:'cite'}])]}]}),
   expandable:()=>insertSpec({type:'blockquote',attrs:{expandable:true},content:[paragraphSpec('Citação expansível'),{type:'paragraph',content:[textSpec('Conteúdo adicional '),textSpec('Autor',[{type:'cite'}])]}]}),
   pullquote:()=>insertSpec({type:'pullquote',content:[textSpec('Trecho em destaque '),textSpec('Autor',[{type:'cite'}])]}),
-  details:()=>{const summary=prompt('Título','Detalhes'),body=prompt('Conteúdo','Conteúdo recolhível.');if(summary!==null&&body!==null)insertSpec({type:'details',attrs:{open:false},content:[{type:'details_summary',...(summary?{content:[textSpec(summary)]}:{})},paragraphSpec(body)]})},
-  pre:()=>{const language=safeName(prompt('Linguagem (opcional)','javascript')||''),code=prompt('Código','console.log("Olá")');if(code!==null)insertSpec({type:'code_block',attrs:{language},...(code?{content:[textSpec(code)]}:{})})},
+  details:async()=>{const summary=await ask({title:'Detalhes',label:'Título',value:'Detalhes'});if(summary===null)return;const body=await ask({title:'Detalhes',label:'Conteúdo',value:'Conteúdo recolhível.'});if(body!==null)insertSpec({type:'details',attrs:{open:false},content:[{type:'details_summary',...(summary?{content:[textSpec(summary)]}:{})},paragraphSpec(body)]})},
+  pre:async()=>{const language=safeName(await ask({title:'Bloco de código',label:'Linguagem opcional',value:'javascript'})||''),code=await ask({title:'Bloco de código',label:'Código',value:'console.log("Olá")'});if(code!==null)insertSpec({type:'code_block',attrs:{language},...(code?{content:[textSpec(code)]}:{})})},
   divider:()=>insertSpec({type:'divider'}),
-  math:()=>{const expression=prompt('Fórmula LaTeX','x^2 + y^2');if(expression)insertSpec({type:'math_inline',attrs:{expression}})},
-  mathblock:()=>{const expression=prompt('Fórmula LaTeX','E = mc^2');if(expression)insertSpec({type:'math_block',attrs:{expression}})},
-  table:()=>{
-    const rows=Math.max(1,Math.min(100,+prompt('Linhas','3')||1)),cols=Math.max(1,Math.min(20,+prompt('Colunas','3')||1));
-    const content=Array.from({length:rows},(_,row)=>({type:'table_row',content:Array.from({length:cols},(_,col)=>({
-      type:row===0?'table_header':'table_cell',
-      attrs:{colspan:1,rowspan:1,align:'',valign:''},
-      content:[textSpec(row===0?'Cabeçalho '+(col+1):'Célula')]
-    }))}));
-    const caption=prompt('Legenda da tabela (opcional)','');
+  math:async()=>{const expression=await ask({title:'Fórmula inline',label:'LaTeX',value:'x^2 + y^2'});if(expression)insertSpec({type:'math_inline',attrs:{expression}})},
+  mathblock:async()=>{const expression=await ask({title:'Fórmula em bloco',label:'LaTeX',value:'E = mc^2'});if(expression)insertSpec({type:'math_block',attrs:{expression}})},
+  table:async()=>{
+    const rows=Math.max(1,Math.min(100,Number(await ask({title:'Tabela',label:'Linhas',value:'3',type:'number'}))||1));
+    const cols=Math.max(1,Math.min(20,Number(await ask({title:'Tabela',label:'Colunas',value:'3',type:'number'}))||1));
+    const content=Array.from({length:rows},(_,row)=>({type:'table_row',content:Array.from({length:cols},(_,col)=>({type:row===0?'table_header':'table_cell',attrs:{colspan:1,rowspan:1,align:'',valign:''},content:[textSpec(row===0?'Cabeçalho '+(col+1):'Célula')]}))}));
+    const caption=await ask({title:'Tabela',label:'Legenda opcional',value:''});if(caption===null)return;
     insertSpec({type:'table',attrs:{bordered:true,striped:false,compact:true},content:[...(caption?[{type:'table_caption',content:[textSpec(caption)]}]:[]),...content]})
   },
-  image:()=>{const src=promptHttp('URL HTTPS da imagem'),caption=src?prompt('Legenda (opcional)','Imagem'):null;if(src)insertSpec({type:'image',attrs:{src,alt:'Imagem',spoiler:false},...(caption?{content:[textSpec(caption)]}:{})})},
-  video:()=>{const src=promptHttp('URL HTTPS do vídeo'),caption=src?prompt('Legenda (opcional)','Vídeo'):null;if(src)insertSpec({type:'video',attrs:{src,alt:'',spoiler:false},...(caption?{content:[textSpec(caption)]}:{})})},
-  audio:()=>{const src=promptHttp('URL HTTPS do áudio'),caption=src?prompt('Legenda (opcional)','Áudio'):null;if(src)insertSpec({type:'audio',attrs:{src,alt:'',spoiler:false},...(caption?{content:[textSpec(caption)]}:{})})},
-  voice:()=>{const src=promptHttp('URL HTTPS da voz (.ogg/.opus)'),caption=src?prompt('Legenda (opcional)','Voz'):null;if(src&&!/\.(?:ogg|oga|opus)(?:[?#]|$)/i.test(src))return say('Use uma URL de voz .ogg, .oga ou .opus');if(src)insertSpec({type:'voice_note',attrs:{src,alt:'',spoiler:false},...(caption?{content:[textSpec(caption)]}:{})})},
-  document:()=>{const src=promptHttp('URL HTTPS do documento'),caption=src?prompt('Legenda (opcional)','Documento'):null;if(src)insertSpec({type:'document',attrs:{src},...(caption?{content:[textSpec(caption)]}:{})})},
-  map:()=>{const lat=Number(prompt('Latitude','-23.5505')),long=Number(prompt('Longitude','-46.6333')),zoom=Math.max(0,Math.min(24,+prompt('Zoom (0–24)','14')||14)),caption=prompt('Legenda (opcional)','Localização');if(Number.isFinite(lat)&&Number.isFinite(long))insertSpec({type:'map',attrs:{lat,long,zoom,width:0,height:0},...(caption?{content:[textSpec(caption)]}:{})})},
-  collage:()=>{const a=promptHttp('Primeira imagem'),b=promptHttp('Segunda imagem');if(a&&b)insertSpec({type:'collage',attrs:{items:[{type:'image',src:a,alt:'Imagem 1',spoiler:false},{type:'image',src:b,alt:'Imagem 2',spoiler:false}]},content:[textSpec('Collage')]})},
-  slideshow:()=>{const a=promptHttp('Primeira imagem'),b=promptHttp('Segundo item (imagem ou vídeo)');if(a&&b)insertSpec({type:'slideshow',attrs:{items:[{type:'image',src:a,alt:'Slide 1',spoiler:false},{type:/\.(?:mp4|mov|webm)(?:\?|$)/i.test(b)?'video':'image',src:b,alt:'Slide 2',spoiler:false}]},content:[textSpec('Slideshow')]})},
-  reference:()=>{const name=safeName(prompt('Identificador da referência','nota-1')),text=prompt('Texto da referência','Fonte ou nota');if(name&&text!==null)core.insertText(text,[{type:'reference',attrs:{name}}])},
-  anchor:()=>{const name=safeName(prompt('Nome da âncora','secao-1'));if(name)insertSpec({type:'anchor',attrs:{name}})},
-  time:()=>{const unix=String(prompt('Unix timestamp',String(Math.floor(Date.now()/1000)))||''),label=prompt('Texto exibido','Data e hora');if(/^\d+$/.test(unix)&&label!==null)insertSpec({type:'time',attrs:{unix,format:'wDT',label}})},
-  emoji:()=>{const emojiId=prompt('Custom emoji ID','5368324170671202286'),fallback=prompt('Emoji alternativo','👍');if(emojiId&&/^\d+$/.test(emojiId)&&fallback)insertSpec({type:'custom_emoji',attrs:{emojiId,fallback}})},
-  button:()=>{
+  image:async()=>{const src=await promptHttp('URL HTTPS da imagem'),caption=src?await ask({title:'Imagem',label:'Legenda opcional',value:'Imagem'}):null;if(src)insertSpec({type:'image',attrs:{src,alt:'Imagem',spoiler:false},...(caption?{content:[textSpec(caption)]}:{})})},
+  video:async()=>{const src=await promptHttp('URL HTTPS do vídeo'),caption=src?await ask({title:'Vídeo',label:'Legenda opcional',value:'Vídeo'}):null;if(src)insertSpec({type:'video',attrs:{src,alt:'',spoiler:false},...(caption?{content:[textSpec(caption)]}:{})})},
+  audio:async()=>{const src=await promptHttp('URL HTTPS do áudio'),caption=src?await ask({title:'Áudio',label:'Legenda opcional',value:'Áudio'}):null;if(src)insertSpec({type:'audio',attrs:{src,alt:'',spoiler:false},...(caption?{content:[textSpec(caption)]}:{})})},
+  voice:async()=>{const src=await promptHttp('URL HTTPS da voz (.ogg/.opus)'),caption=src?await ask({title:'Mensagem de voz',label:'Legenda opcional',value:'Voz'}):null;if(src&&!/\.(?:ogg|oga|opus)(?:[?#]|$)/i.test(src))return say('Use uma URL de voz .ogg, .oga ou .opus');if(src)insertSpec({type:'voice_note',attrs:{src,alt:'',spoiler:false},...(caption?{content:[textSpec(caption)]}:{})})},
+  document:async()=>{const src=await promptHttp('URL HTTPS do documento'),caption=src?await ask({title:'Documento',label:'Legenda opcional',value:'Documento'}):null;if(src)insertSpec({type:'document',attrs:{src},...(caption?{content:[textSpec(caption)]}:{})})},
+  map:async()=>{const lat=Number(await ask({title:'Mapa',label:'Latitude',value:'-23.5505'})),long=Number(await ask({title:'Mapa',label:'Longitude',value:'-46.6333'})),zoom=Math.max(0,Math.min(24,Number(await ask({title:'Mapa',label:'Zoom (0–24)',value:'14'}))||14)),caption=await ask({title:'Mapa',label:'Legenda opcional',value:'Localização'});if(Number.isFinite(lat)&&Number.isFinite(long)&&caption!==null)insertSpec({type:'map',attrs:{lat,long,zoom,width:0,height:0},...(caption?{content:[textSpec(caption)]}:{})})},
+  collage:async()=>{const a=await promptHttp('Primeira imagem'),b=await promptHttp('Segunda imagem');if(a&&b)insertSpec({type:'collage',attrs:{items:[{type:'image',src:a,alt:'Imagem 1',spoiler:false},{type:'image',src:b,alt:'Imagem 2',spoiler:false}]},content:[textSpec('Collage')]})},
+  slideshow:async()=>{const a=await promptHttp('Primeira imagem'),b=await promptHttp('Segundo item (imagem ou vídeo)');if(a&&b)insertSpec({type:'slideshow',attrs:{items:[{type:'image',src:a,alt:'Slide 1',spoiler:false},{type:/\.(?:mp4|mov|webm)(?:\?|$)/i.test(b)?'video':'image',src:b,alt:'Slide 2',spoiler:false}]},content:[textSpec('Slideshow')]})},
+  reference:async()=>{const name=safeName(await ask({title:'Referência',label:'Identificador',value:'nota-1'})),text=await ask({title:'Referência',label:'Texto',value:'Fonte ou nota'});if(name&&text!==null)core.insertText(text,[{type:'reference',attrs:{name}}])},
+  anchor:async()=>{const name=safeName(await ask({title:'Âncora',label:'Nome',value:'secao-1'}));if(name)insertSpec({type:'anchor',attrs:{name}})},
+  time:async()=>{const unix=String(await ask({title:'Data e hora',label:'Unix timestamp',value:String(Math.floor(Date.now()/1000))})||''),label=await ask({title:'Data e hora',label:'Texto exibido',value:'Data e hora'});if(/^\d+$/.test(unix)&&label!==null)insertSpec({type:'time',attrs:{unix,format:'wDT',label}})},
+  emoji:async()=>{const emojiId=await ask({title:'Custom emoji',label:'Telegram emoji ID',value:'5368324170671202286'}),fallback=await ask({title:'Custom emoji',label:'Emoji alternativo',value:'👍'});if(emojiId&&/^\d+$/.test(emojiId)&&fallback)insertSpec({type:'custom_emoji',attrs:{emojiId,fallback}})},
+  button:async()=>{
     const supported=['url','callback_data','web_app','login_url','switch_inline_query','switch_inline_query_current_chat','switch_inline_query_chosen_chat','copy_text','disabled'];
-    const type=(prompt('Tipo: '+supported.join(', '),'url')||'').trim();if(!supported.includes(type))return say('Tipo de botão não suportado');
-    const label=prompt('Texto do botão','Abrir');if(!label)return;
+    const type=(await ask({title:'Botão Rich Message',label:'Tipo',value:'url',help:supported.join(' · ')})||'').trim();if(!supported.includes(type))return type&&say('Tipo de botão não suportado');
+    const label=await ask({title:'Botão Rich Message',label:'Texto do botão',value:'Abrir'});if(!label)return;
     const attrs={type,style:'',url:'',data:'',text:'',query:'',forwardText:'',requestWriteAccess:false,allowUserChats:false,allowBotChats:false,allowGroupChats:false,allowChannelChats:false};
-    const style=(prompt('Estilo opcional: danger, success, primary'+(type==='callback_data'?', link':''),'')||'').trim();if(style)attrs.style=style;
-    if(type==='url'||type==='web_app'||type==='login_url'){const value=promptHttp('URL HTTPS');if(!value)return;attrs.url=value}
-    if(type==='callback_data'){const value=prompt('Callback data (1–64 bytes)','callback');if(!value)return;attrs.data=value}
-    if(type==='login_url'){attrs.forwardText=prompt('Texto ao encaminhar (opcional)','')||'';attrs.requestWriteAccess=confirm('Solicitar permissão de escrita?')}
-    if(type==='switch_inline_query'||type==='switch_inline_query_current_chat'||type==='switch_inline_query_chosen_chat')attrs.query=prompt('Consulta inline','')||'';
+    const style=(await ask({title:'Botão Rich Message',label:'Estilo opcional',value:'',help:'danger · success · primary'+(type==='callback_data'?' · link':'')})||'').trim();if(style)attrs.style=style;
+    if(type==='url'||type==='web_app'||type==='login_url'){const value=await promptHttp('URL HTTPS');if(!value)return;attrs.url=value}
+    if(type==='callback_data'){const value=await ask({title:'Botão Rich Message',label:'Callback data (1–64 bytes)',value:'callback'});if(!value)return;attrs.data=value}
+    if(type==='login_url'){attrs.forwardText=await ask({title:'Login URL',label:'Texto ao encaminhar opcional',value:''})||'';attrs.requestWriteAccess=await askConfirm('Solicitar permissão de escrita?',{title:'Login URL'})}
+    if(type==='switch_inline_query'||type==='switch_inline_query_current_chat'||type==='switch_inline_query_chosen_chat')attrs.query=await ask({title:'Consulta inline',label:'Consulta',value:''})||'';
     if(type==='switch_inline_query_chosen_chat'){attrs.allowUserChats=true;attrs.allowBotChats=true;attrs.allowGroupChats=true;attrs.allowChannelChats=true}
-    if(type==='copy_text'){const value=prompt('Texto para copiar','Texto');if(value===null)return;attrs.text=value}
+    if(type==='copy_text'){const value=await ask({title:'Copiar texto',label:'Texto',value:'Texto'});if(value===null)return;attrs.text=value}
     insertSpec({type:'button_row',attrs:{align:'center'},content:[{type:'button',attrs,content:[textSpec(label)]}]})
   },
   keyboard:manageKeyboard,
-  keyboardclear:()=>{if(doc&&keyboardButtons().length&&confirm('Remover todo o teclado inline?')){doc.options.inlineKeyboard=[];dirty();say('Teclado inline removido')}},
+  keyboardclear:async()=>{if(doc&&keyboardButtons().length&&await askConfirm('Remover todo o teclado inline?',{title:'Limpar teclado',confirmText:'Remover',danger:true})){doc.options.inlineKeyboard=[];dirty();say('Teclado inline removido')}},
   rtl:()=>{rtl=!rtl;applyOptions();dirty()},
   entities:()=>{skipEntityDetection=!skipEntityDetection;applyOptions();dirty()},
   export:()=>{syncDoc();const blob=new Blob([RMD.exportDocument(doc)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='RMDtxtML.rmdtxtml';a.click();URL.revokeObjectURL(url)},
@@ -272,14 +294,13 @@ const actions={
   exportsource:()=>{
     const source=doc?.source;if(!source?.originalBase64)return say('Este documento não possui arquivo-fonte preservado');
     const raw=atob(source.originalBase64),bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
-    const blob=new Blob([bytes],{type:source.mime||'application/octet-stream'}),url=URL.createObjectURL(blob),a=document.createElement('a');
-    a.href=url;a.download=source.name||'original';a.click();URL.revokeObjectURL(url)
+    const blob=new Blob([bytes],{type:source.mime||'application/octet-stream'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=source.name||'original';a.click();URL.revokeObjectURL(url)
   },
   import:()=>$('#file').click(),
-  revision:async()=>{if(!doc?.revisions?.length)return say('Nenhuma revisão salva');const list=doc.revisions.slice(-10).reverse(),choice=prompt('Revisão para restaurar:\n'+list.map(r=>r.revision+' · '+new Date(r.at).toLocaleString('pt-BR')).join('\n'),String(list[0].revision));if(choice===null)return;const rev=Number(choice);if(!Number.isSafeInteger(rev))return say('Revisão inválida');try{doc=await store.restore(doc,rev,modelOptions());rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;core.setModel(doc.content.model,{history:false});applyOptions();setSaveState('saved','Salvo');syncDocumentBar();syncSendUi();updateStatus('Revisão restaurada');say('Revisão restaurada')}catch{say('Revisão não encontrada')}},
-  reset:async()=>{if(confirm('Apagar o documento atual e iniciar um documento vazio?')){doc=await store.reset({model:core.emptyModel(),normalizeModel:m=>core.normalizeModel(m)});rtl=false;skipEntityDetection=false;core.setModel(doc.content.model,{history:false});applyOptions();syncDocumentBar();setSaveState('saved','Salvo');updateStatus('Novo documento');syncSendUi()}}
+  revision:async()=>{if(!doc?.revisions?.length)return say('Nenhuma revisão salva');const list=doc.revisions.slice(-10).reverse(),choice=await ask({title:'Restaurar revisão',label:'Número da revisão',value:String(list[0].revision),help:list.map(r=>r.revision+' · '+new Date(r.at).toLocaleString('pt-BR')).join(' · ')});if(choice===null)return;const rev=Number(choice);if(!Number.isSafeInteger(rev))return say('Revisão inválida');try{doc=await store.restore(doc,rev,modelOptions());rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;core.setModel(doc.content.model,{history:false});applyOptions();setSaveState('saved','Salvo');syncDocumentBar();syncSendUi();updateStatus('Revisão restaurada');say('Revisão restaurada')}catch{say('Revisão não encontrada')}},
+  reset:async()=>{if(await askConfirm('Apagar o documento atual e iniciar um documento vazio?',{title:'Novo documento',confirmText:'Apagar e criar',danger:true})){doc=await store.reset({model:core.emptyModel(),normalizeModel:m=>core.normalizeModel(m)});rtl=false;skipEntityDetection=false;core.setModel(doc.content.model,{history:false});applyOptions();syncDocumentBar();setSaveState('saved','Salvo');updateStatus('Novo documento');syncSendUi()}}
 };
-$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();actions[b.dataset.action]?.();queueMicrotask(syncEditorUi)});
+$('[data-action]').forEach(b=>b.onclick=async()=>{closeDrawer();await actions[b.dataset.action]?.();queueMicrotask(syncEditorUi)});
 
 const MAX_IMPORT_BYTES=2*1024*1024;
 function bytesToBase64(bytes){let binary='';for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));return btoa(binary)}
@@ -288,7 +309,7 @@ async function decodeImport(file){
   const bytes=new Uint8Array(await file.arrayBuffer()),bom=bytes.length>=3&&bytes[0]===0xef&&bytes[1]===0xbb&&bytes[2]===0xbf;
   try{return{text:new TextDecoder('utf-8',{fatal:true}).decode(bytes),encoding:'utf-8',bom,bytes}}
   catch{
-    const selected=prompt('O arquivo não é UTF-8. Informe o encoding (ex.: windows-1252 ou iso-8859-1).','windows-1252');
+    const selected=await ask({title:'Codificação do arquivo',label:'Encoding',value:'windows-1252',help:'Ex.: windows-1252 ou iso-8859-1'});
     if(!selected)throw new Error('encoding_required');
     try{return{text:new TextDecoder(selected,{fatal:true}).decode(bytes),encoding:selected.toLowerCase(),bom:false,bytes}}
     catch{throw new Error('unsupported_encoding')}
@@ -325,8 +346,8 @@ $('#file').onchange=async e=>{
 $('#save').onclick=async()=>{try{await persistDocument({checkpoint:true,label:'Salvo'});say('Checkpoint salvo')}catch{updateStatus('Falha ao salvar');say('Não foi possível salvar')}};
 
 $('#back').onclick=()=>platform.close();
-docName.onclick=()=>{
-  if(!doc)return;const value=prompt('Nome do documento',String(doc.meta?.name||'Sem título'));if(value===null)return;
+docName.onclick=async()=>{
+  if(!doc)return;const value=await ask({title:'Renomear documento',label:'Nome',value:String(doc.meta?.name||'Sem título')});if(value===null)return;
   const name=value.trim().slice(0,120)||'Sem título';if(name===doc.meta?.name)return;
   doc.meta.name=name;syncDocumentBar();dirty(false)
 };

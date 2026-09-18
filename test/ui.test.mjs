@@ -76,3 +76,13 @@ test('H1 H2 H3 remain distinct actions and orange is the application accent',asy
   for(const level of ['h1','h2','h3']){assert.match(html,new RegExp('data-action="'+level+'"'));assert.match(app,new RegExp(level+':\\(\\)=>core\\.block\\(\''+level+'\'\\)'))}
   assert.match(css,/--app-accent:#ff7a00/);assert.match(css,/--accent:var\(--app-accent\)/)
 });
+
+
+test('finished product uses an in-app dialog instead of native prompt and confirm APIs',async()=>{
+  const [html,app,css]=await Promise.all([read('docs/index.html'),read('docs/app.js'),read('docs/app.css')]);
+  assert.match(html,/<dialog id="inputDialog"[^>]*aria-labelledby="inputDialogTitle"/);
+  assert.match(html,/id="inputDialogValue"/);assert.match(html,/id="inputDialogOk"/);assert.match(html,/id="inputDialogCancel"/);
+  assert.match(app,/function ask\(/);assert.match(app,/async function askConfirm\(/);
+  assert.doesNotMatch(app,/\bprompt\s*\(/);assert.doesNotMatch(app,/\bconfirm\s*\(/);
+  assert.match(css,/\.inputDialog\{/);assert.match(css,/\.inputDialog::backdrop/)
+});
