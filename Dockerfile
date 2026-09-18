@@ -25,6 +25,7 @@ RUN touch /tmp/rmdtxtml-qa-passed
 FROM node:24.21.0-alpine
 WORKDIR /app
 COPY --from=test /tmp/rmdtxtml-qa-passed /tmp/rmdtxtml-qa-passed
+RUN test -f /tmp/rmdtxtml-qa-passed
 COPY package.json ./
 COPY src ./src
 COPY --from=test /app/docs ./docs
