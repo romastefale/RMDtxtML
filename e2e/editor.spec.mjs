@@ -47,33 +47,18 @@ async function setEditor(page,html){
   await page.locator('#editor').focus()
 }
 async function selectText(page,text){
-  await page.locator('#editor').evaluate((el,needle)=>{
-    const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);let node;
-    while(node=walker.nextNode()){
-      const at=node.data.indexOf(needle);
-      if(at>=0){
-        const r=document.createRange();r.setStart(node,at);r.setEnd(node,at+needle.length);
-        const s=getSelection();s.removeAllRanges();s.addRange(r);document.dispatchEvent(new Event('selectionchange'));return
-      }
-    }
-    throw new Error('selection_text_not_found')
-  },text)
+  await page.evaluate(needle=>{if(!window.RMD.editor.selectText(needle))throw new Error('selection_text_not_found')},text)
 }
-async function selectAll(page){
-  await page.locator('#editor').evaluate(el=>{
-    const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);
-    document.dispatchEvent(new Event('selectionchange'))
-  })
-}
+async function selectAll(page){await page.evaluate(()=>window.RMD.editor.selectAll())}
 
 test('inline formatting toggles without losing the selected text',async({page})=>{
   await web(page);await setEditor(page,'<p>alpha beta gamma</p>');await selectText(page,'beta');
   await page.locator('[data-cmd="bold"]').click();
-  await expect(page.locator('#editor')).toHaveJSProperty('innerHTML','<p>alpha <strong>beta</strong> gamma</p>');
+  expect(await page.evaluate(()=>window.RMD.editor.html())).toBe('<p>alpha <strong>beta</strong> gamma</p>');
   await expect(page.locator('[data-cmd="bold"]')).toHaveAttribute('aria-pressed','true');
-  expect(await page.evaluate(()=>getSelection().toString())).toBe('beta');
+  expect((await page.evaluate(()=>window.RMD.editor.selectionState())).text).toBe('beta');
   await page.locator('[data-cmd="bold"]').click();
-  await expect(page.locator('#editor')).toHaveJSProperty('innerHTML','<p>alpha beta gamma</p>');
+  expect(await page.evaluate(()=>window.RMD.editor.html())).toBe('<p>alpha beta gamma</p>');
   expect(await page.evaluate(()=>getSelection().toString())).toBe('beta')
 });
 
@@ -82,7 +67,7 @@ test('subscript applies and clear-format affects only the selected range',async(
   await page.locator('#more').click();await page.locator('[data-action="sub"]').click();
   await expect(page.locator('#editor sub')).toHaveText('beta');
   await selectText(page,'beta');await page.locator('#more').click();await page.locator('[data-action="clear"]').click();
-  expect(await page.locator('#editor').evaluate(el=>el.innerHTML)).toBe('<p><strong>alpha </strong>beta<strong> gamma</strong></p>')
+  expect(await page.evaluate(()=>window.RMD.editor.html())).toBe('<p><strong>alpha </strong>beta<strong> gamma</strong></p>')
 });
 
 test('link prompt preserves selection and block conversion stays in place',async({page})=>{
@@ -111,7 +96,7 @@ test('list transaction survives undo and redo without phantom blocks',async({pag
 
 test('drawer and preview do not mutate the document and restore focus',async({page})=>{
   await web(page);await setEditor(page,'<h2>Título</h2><p>Texto <strong>forte</strong></p>');
-  const before=await page.locator('#editor').evaluate(el=>el.innerHTML);
+  const before=await page.evaluate(()=>window.RMD.editor.html());
   await page.locator('#more').focus();await page.locator('#more').click();
   await expect(page.locator('#drawer')).toHaveAttribute('aria-hidden','false');
   await expect(page.locator('#more')).toHaveAttribute('aria-expanded','true');
@@ -119,7 +104,7 @@ test('drawer and preview do not mutate the document and restore focus',async({pa
   await page.keyboard.press('Escape');
   await expect(page.locator('#drawer')).toHaveAttribute('aria-hidden','true');
   await expect(page.locator('#more')).toBeFocused();
-  expect(await page.locator('#editor').evaluate(el=>el.innerHTML)).toBe(before);
+  expect(await page.evaluate(()=>window.RMD.editor.html())).toBe(before);
   await page.locator('#previewBtn').click();
   await expect(page.locator('#editWrap')).toBeHidden();
   await expect(page.locator('#preview')).toContainText('Texto forte');
@@ -201,13 +186,10 @@ test('responsive geometry remains usable from 320px through desktop width',async
 
 test('caret and focus survive viewport resize and theme changes dynamically',async({page})=>{
   await web(page);await setEditor(page,'<p>abcdef</p>');
-  await page.locator('#editor').evaluate(el=>{
-    const n=el.querySelector('p').firstChild,r=document.createRange();r.setStart(n,3);r.collapse(true);
-    const s=getSelection();s.removeAllRanges();s.addRange(r);el.focus();document.dispatchEvent(new Event('selectionchange'))
-  });
+  await page.evaluate(()=>window.RMD.editor.setCursorInText('abcdef',3));
   await page.setViewportSize({width:320,height:620});
-  const caret=await page.evaluate(()=>({active:document.activeElement?.id,text:getSelection().anchorNode?.data,offset:getSelection().anchorOffset}));
-  expect(caret).toEqual({active:'editor',text:'abcdef',offset:3});
+  const caret=await page.evaluate(()=>({active:document.activeElement?.id,...window.RMD.editor.selectionState()}));
+  expect(caret.active).toBe('editor');expect(caret.empty).toBe(true);expect(caret.from).toBe(caret.to);
   await page.emulateMedia({colorScheme:'dark'});await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
   await page.emulateMedia({colorScheme:'light'});await expect(page.locator('html')).toHaveAttribute('data-theme','light')
 });
