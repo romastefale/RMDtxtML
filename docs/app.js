@@ -304,7 +304,7 @@ const actions={
   revision:async()=>{if(!doc?.revisions?.length)return say('Nenhuma revisão salva');const list=doc.revisions.slice(-10).reverse(),choice=await ask({title:'Restaurar revisão',label:'Número da revisão',value:String(list[0].revision),help:list.map(r=>r.revision+' · '+new Date(r.at).toLocaleString('pt-BR')).join(' · ')});if(choice===null)return;const rev=Number(choice);if(!Number.isSafeInteger(rev))return say('Revisão inválida');try{doc=await store.restore(doc,rev,modelOptions());rtl=doc.options.isRtl;skipEntityDetection=doc.options.skipEntityDetection;core.setModel(doc.content.model,{history:false});applyOptions();setSaveState('saved','Salvo');syncDocumentBar();syncSendUi();updateStatus('Revisão restaurada');say('Revisão restaurada')}catch{say('Revisão não encontrada')}},
   reset:async()=>{if(await askConfirm('Apagar o documento atual e iniciar um documento vazio?',{title:'Novo documento',confirmText:'Apagar e criar',danger:true})){doc=await store.reset({model:core.emptyModel(),normalizeModel:m=>core.normalizeModel(m)});rtl=false;skipEntityDetection=false;core.setModel(doc.content.model,{history:false});applyOptions();syncDocumentBar();setSaveState('saved','Salvo');updateStatus('Novo documento');syncSendUi()}}
 };
-$('[data-action]').forEach(b=>b.onclick=async()=>{closeDrawer();await actions[b.dataset.action]?.();queueMicrotask(syncEditorUi)});
+document.querySelectorAll('[data-action]').forEach(b=>b.onclick=async()=>{closeDrawer();await actions[b.dataset.action]?.();queueMicrotask(syncEditorUi)});
 
 const MAX_IMPORT_BYTES=2*1024*1024;
 function bytesToBase64(bytes){let binary='';for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));return btoa(binary)}
