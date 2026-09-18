@@ -116,3 +116,13 @@ test('schema 2 model version 1 migrates explicitly to model version 2',async()=>
   });
   assert.equal(migrated.content.modelVersion,2);assert.deepEqual(migrated.content.model,model('migrado'))
 });
+
+test('loading model version 1 persists the migrated model version 2 exactly once',async()=>{
+  const{RMD,localStorage}=await runtime();
+  localStorage.setItem('rmdtxtml-document-v2',JSON.stringify({schema:2,format:'semantic',content:{model:model('v1'),modelVersion:1},meta:{revision:0},revisions:[]}));
+  const store=new RMD.DocumentStore();
+  const loaded=await store.load({normalizeModel,migrateHtml,migrateModel:(value,version)=>{assert.equal(version,1);return model('v2')}});
+  assert.equal(loaded.migrated,true);assert.equal(loaded.doc.content.modelVersion,2);assert.deepEqual(loaded.doc.content.model,model('v2'));
+  const persisted=JSON.parse(localStorage.getItem('rmdtxtml-document-v2'));
+  assert.equal(persisted.content.modelVersion,2);assert.deepEqual(persisted.content.model,model('v2'))
+});

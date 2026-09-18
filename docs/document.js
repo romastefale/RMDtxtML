@@ -33,7 +33,7 @@ function normalize(input,{normalizeModel=defaultNormalize,migrateHtml,migrateMod
   doc.options.skipEntityDetection=src.options?.skipEntityDetection===true||src.skipEntityDetection===true;
   if(src.schema===SCHEMA&&src.migration&&typeof src.migration==='object')doc.migration=clone(src.migration);
   if(src.source&&typeof src.source==='object')doc.source=clone(src.source);
-  else if(legacy!==null)doc.migration={fromSchema:Number.isSafeInteger(Number(src.schema))?Number(src.schema):0,at:now(),original:clone(src)};
+  if(legacy!==null&&!doc.migration)doc.migration={fromSchema:Number.isSafeInteger(Number(src.schema))?Number(src.schema):0,at:now(),original:clone(src)};
   const created=src.meta?.createdAt;doc.meta.createdAt=typeof created==='string'&&created?created:doc.meta.createdAt;
   const rev=Number(src.meta?.revision);doc.meta.revision=Number.isSafeInteger(rev)&&rev>=0?rev:0;
   if(Array.isArray(src.revisions))doc.revisions=src.revisions.slice(-MAX_REVISIONS).map(r=>{
@@ -97,7 +97,7 @@ class Store{
   async load({initialModel=EMPTY,normalizeModel,migrateHtml,migrateModel}={}){
     let raw=await this.get(),migrated=false;
     if(!raw){const old=this.legacy();if(old){raw=old;migrated=true}}
-    if(raw&&(raw.schema!==SCHEMA||raw.format!=='semantic'))migrated=true;
+    if(raw&&(raw.schema!==SCHEMA||raw.format!=='semantic'||Number(raw?.content?.modelVersion??1)!==MODEL_VERSION))migrated=true;
     const doc=normalize(raw||{schema:SCHEMA,format:'semantic',content:{model:initialModel,modelVersion:MODEL_VERSION}},{normalizeModel,migrateHtml,migrateModel});
     if(migrated){await this.put(doc);this.clearLegacy()}
     return{doc,migrated,mode:this.mode}

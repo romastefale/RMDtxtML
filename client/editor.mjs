@@ -177,7 +177,7 @@ function buttonAttrs(el){return{
   forwardText:el.getAttribute('forward-text')||'',requestWriteAccess:el.hasAttribute('request-write-access'),allowUserChats:el.hasAttribute('allow-user-chats'),allowBotChats:el.hasAttribute('allow-bot-chats'),allowGroupChats:el.hasAttribute('allow-group-chats'),allowChannelChats:el.hasAttribute('allow-channel-chats')
 }}
 function buttonDomAttrs(a){return{
-  type:a.type,...(a.style?{style:a.style}:{}),...(a.url?{url:a.url}:{}),...(a.data?{data:a.data}:{}),...(a.text?{text:a.text}:{}),...(a.query?{query:a.query}:{}),...(a.forwardText?{'forward-text':a.forwardText}:{}),
+  type:a.type,...(a.style?{'data-rmd-style':a.style}:{}),...(a.url?{url:a.url}:{}),...(a.data?{data:a.data}:{}),...(a.text?{text:a.text}:{}),...(a.query?{query:a.query}:{}),...(a.forwardText?{'forward-text':a.forwardText}:{}),
   ...(a.requestWriteAccess?{'request-write-access':''}:{}),...(a.allowUserChats?{'allow-user-chats':''}:{}),...(a.allowBotChats?{'allow-bot-chats':''}:{}),...(a.allowGroupChats?{'allow-group-chats':''}:{}),...(a.allowChannelChats?{'allow-channel-chats':''}:{})
 }}
 function cellAttrs(el){return{colspan:Number(el.getAttribute('colspan')||1),rowspan:Number(el.getAttribute('rowspan')||1),align:el.getAttribute('align')||'',valign:el.getAttribute('valign')||''}}
@@ -252,7 +252,7 @@ function toHtml(json){
     const checked=li.getAttribute('data-task')==='done',input=document.createElement('input');
     input.setAttribute('type','checkbox');if(checked)input.setAttribute('checked','');li.removeAttribute('data-task');li.prepend(input)
   }
-  return box.innerHTML
+  return box.innerHTML.replace(/\bdata-rmd-style=/g,'style=')
 }
 function nodeText(node){
   let text=node.textContent||'';

@@ -161,9 +161,9 @@ test('checkpoint persists the canonical document across reload',async({page})=>{
 test('media semantic model is stable across Rich HTML projection and reparse',async({page})=>{
   await web(page);
   const model={type:'doc',content:[
-    {type:'image',attrs:{src:'https://example.com/a.jpg',caption:'Legenda imagem',alt:'A',spoiler:false}},
-    {type:'video',attrs:{src:'https://example.com/a.mp4',caption:'Legenda vídeo',alt:'',spoiler:false}},
-    {type:'document',attrs:{src:'https://example.com/a.pdf',caption:'Legenda documento'}}
+    {type:'image',attrs:{src:'https://example.com/a.jpg',alt:'A',spoiler:false},content:[{type:'text',text:'Legenda imagem'}]},
+    {type:'video',attrs:{src:'https://example.com/a.mp4',alt:'',spoiler:false},content:[{type:'text',text:'Legenda vídeo'}]},
+    {type:'document',attrs:{src:'https://example.com/a.pdf'},content:[{type:'text',text:'Legenda documento'}]}
   ]};
   const result=await page.evaluate(input=>{
     RMD.editor.setModel(input,{history:false});
