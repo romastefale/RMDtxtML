@@ -172,7 +172,7 @@ $('#file').onchange=async e=>{
 };
 $('#save').onclick=async()=>{try{await persistDocument({checkpoint:true,label:'Salvo'});say('Checkpoint salvo')}catch{updateStatus('Falha ao salvar');say('Não foi possível salvar')}};
 $('#previewBtn').onclick=()=>{const wrap=$('#previewWrap'),open=!wrap.classList.contains('open');if(open){$('#preview').innerHTML=currentHtml();$('#preview').dir=rtl?'rtl':'ltr'}wrap.classList.toggle('open',open);$('#editWrap').hidden=open;$('#previewBtn').textContent=open?'✕':'◉';updateStatus(open?'Prévia':'Edição')};
-$('#back').onclick=()=>tg?.close?tg.close():history.back();
+$('#back').onclick=()=>platform.isTelegram()?tg?.close?.():history.back();
 ed.onpaste=e=>{const h=e.clipboardData?.getData('text/html');if(h){e.preventDefault();insertHtml(sanitizeRichHtml(h))}};
 
 $('#send').onclick=async()=>{
