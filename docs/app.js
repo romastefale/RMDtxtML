@@ -27,7 +27,7 @@ const ATTRS={
 const BLOCK_SELECTOR='h1,h2,h3,h4,h5,h6,p,footer,pre,ul,ol,blockquote,aside,figure,tg-map,tg-collage,tg-slideshow,table,details,tg-math-block,tg-button-row,hr';
 const BOOL_ATTRS=new Set(['checked','reversed','expandable','tg-spoiler','bordered','striped','compact','open','request-write-access','allow-user-chats','allow-bot-chats','allow-group-chats','allow-channel-chats']);
 
-function syncTheme(){const inside=platform.isTelegram(),dark=inside&&tg?.colorScheme?tg.colorScheme==='dark':themeQuery.matches;document.documentElement.dataset.theme=dark?'dark':'light';document.documentElement.style.colorScheme=dark?'dark':'light';if(inside){tg.setHeaderColor?.('bg_color');tg.setBackgroundColor?.('bg_color');tg.setBottomBarColor?.('bottom_bar_bg_color')}}
+function syncTheme(){const dark=platform.isTelegram()?platform.colorScheme()==='dark':themeQuery.matches;document.documentElement.dataset.theme=dark?'dark':'light';document.documentElement.style.colorScheme=dark?'dark':'light'}
 function say(message){toast.textContent=message;toast.classList.add('show');clearTimeout(say.t);say.t=setTimeout(()=>toast.classList.remove('show'),2200)}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function validHref(v){return /^(#|https?:|mailto:|tel:|tg:\/\/user\?id=)/i.test(v)}
@@ -191,7 +191,7 @@ $('#previewBtn').onclick=()=>{
   $('#previewWrap').classList.add('open');$('#editWrap').hidden=true;$('#previewBtn').textContent='✕';
   updateStatus('Prévia');syncBack()
 };
-$('#back').onclick=()=>platform.isTelegram()?tg?.close?.():history.back();
+$('#back').onclick=()=>platform.close();
 ed.onpaste=e=>{const h=e.clipboardData?.getData('text/html');if(h){e.preventDefault();insertHtml(sanitizeRichHtml(h))}};
 
 async function sendMessage(){
@@ -206,8 +206,8 @@ async function sendMessage(){
   status.textContent='Enviando…';platform.setMain({text:'Enviando…',visible:true,enabled:false,busy:true,onClick:sendMessage});
   try{
     await platform.json('/api/send',{method:'POST',auth:true,body:{requestId:sendRequestId,chatId,html:m.html,isRtl:rtl,skipEntityDetection}});
-    sendRequestId='';platform.setMain({text:'Enviar',visible:true,enabled:true,busy:false,onClick:sendMessage});updateStatus('Enviado');say('Rich Message enviada');tg?.HapticFeedback?.notificationOccurred?.('success');
-  }catch(error){platform.setMain({text:'Enviar',visible:true,enabled:true,busy:false,onClick:sendMessage});updateStatus(error?.info?.uncertain?'Resultado indeterminado':'Falha');say(error instanceof Error?error.message:'Falha no envio');tg?.HapticFeedback?.notificationOccurred?.('error')}
+    sendRequestId='';platform.setMain({text:'Enviar',visible:true,enabled:true,busy:false,onClick:sendMessage});updateStatus('Enviado');say('Rich Message enviada');platform.haptic('success');
+  }catch(error){platform.setMain({text:'Enviar',visible:true,enabled:true,busy:false,onClick:sendMessage});updateStatus(error?.info?.uncertain?'Resultado indeterminado':'Falha');say(error instanceof Error?error.message:'Falha no envio');platform.haptic('error')}
 }
 $('#send').onclick=sendMessage;
 if(platform.isTelegram())platform.setMain({text:'Enviar',visible:true,enabled:true,onClick:sendMessage});
@@ -225,7 +225,7 @@ async function initDocument(){
   updateStatus(loaded.migrated?'Rascunho migrado':'Pronto');
   return doc
 }
-syncTheme();themeQuery.addEventListener?.('change',syncTheme);tg?.onEvent?.('themeChanged',syncTheme);
+syncTheme();themeQuery.addEventListener?.('change',syncTheme);platform.on('theme',syncTheme);
 RMD.ready=initDocument();
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')persistDocument({label:'Salvo automaticamente'}).catch(()=>{})});
 window.addEventListener('pagehide',()=>{persistDocument({label:'Salvo automaticamente'}).catch(()=>{})});
