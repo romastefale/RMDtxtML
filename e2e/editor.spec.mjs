@@ -1,0 +1,253 @@
+import {test,expect} from '@playwright/test';
+
+const telegramPattern=/https:\/\/telegram\.org\/js\/telegram-web-app\.js/;
+
+async function waitReady(page){
+  await page.waitForFunction(()=>window.RMD?.ready);
+  await page.evaluate(()=>window.RMD.ready)
+}
+async function web(page,path='/'){
+  await page.route(telegramPattern,route=>route.fulfill({status:200,contentType:'application/javascript',body:''}));
+  await page.goto(path);
+  await waitReady(page)
+}
+function telegramScript(startParam=''){
+  return `(()=>{
+    const handlers=new Map();
+    const button=()=>({
+      isVisible:false,isActive:true,isProgressVisible:false,text:'',handler:null,
+      onClick(fn){this.handler=fn},offClick(fn){if(!fn||this.handler===fn)this.handler=null},
+      show(){this.isVisible=true},hide(){this.isVisible=false},enable(){this.isActive=true},disable(){this.isActive=false},
+      showProgress(){this.isProgressVisible=true},hideProgress(){this.isProgressVisible=false},setText(v){this.text=v}
+    });
+    const tg={
+      initData:'signed-raw-data',initDataUnsafe:{user:{id:42,first_name:'Test'},start_param:${JSON.stringify(startParam)}},
+      platform:'ios',version:'10.3',colorScheme:'dark',viewportHeight:720,viewportStableHeight:700,
+      isExpanded:true,isFullscreen:false,isActive:true,
+      safeAreaInset:{top:8,right:2,bottom:6,left:2},contentSafeAreaInset:{top:4,right:3,bottom:10,left:3},
+      BackButton:button(),MainButton:button(),HapticFeedback:{notificationOccurred(type){this.type=type}},
+      onEvent(name,fn){if(!handlers.has(name))handlers.set(name,new Set());handlers.get(name).add(fn)},
+      emit(name,data){for(const fn of handlers.get(name)||[])fn(data)},
+      ready(){this.readyCalled=true},expand(){this.expandCalled=true},requestFullscreen(){this.fullscreenRequested=true},
+      setHeaderColor(v){this.header=v},setBackgroundColor(v){this.background=v},setBottomBarColor(v){this.bottom=v},
+      enableClosingConfirmation(){this.closing=true},disableClosingConfirmation(){this.closing=false},
+      hideKeyboard(){this.keyboardHidden=true},close(){this.closed=true}
+    };
+    window.Telegram={WebApp:tg};window.__tg=tg
+  })();`
+}
+async function telegram(page,{path='/',startParam=''}={}){
+  await page.route(telegramPattern,route=>route.fulfill({status:200,contentType:'application/javascript',body:telegramScript(startParam)}));
+  await page.goto(path);
+  await waitReady(page)
+}
+async function setEditor(page,html){
+  await page.locator('#editor').evaluate((el,value)=>{
+    el.innerHTML=value;
+    el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText'}))
+  },html)
+}
+async function selectText(page,text){
+  await page.locator('#editor').evaluate((el,needle)=>{
+    const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);let node;
+    while(node=walker.nextNode()){
+      const at=node.data.indexOf(needle);
+      if(at>=0){
+        const r=document.createRange();r.setStart(node,at);r.setEnd(node,at+needle.length);
+        const s=getSelection();s.removeAllRanges();s.addRange(r);document.dispatchEvent(new Event('selectionchange'));return
+      }
+    }
+    throw new Error('selection_text_not_found')
+  },text)
+}
+async function selectAll(page){
+  await page.locator('#editor').evaluate(el=>{
+    const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);
+    document.dispatchEvent(new Event('selectionchange'))
+  })
+}
+
+test('inline formatting toggles without losing the selected text',async({page})=>{
+  await web(page);await setEditor(page,'<p>alpha beta gamma</p>');await selectText(page,'beta');
+  await page.locator('[data-cmd="bold"]').click();
+  await expect(page.locator('#editor')).toHaveJSProperty('innerHTML','<p>alpha <strong>beta</strong> gamma</p>');
+  await expect(page.locator('[data-cmd="bold"]')).toHaveAttribute('aria-pressed','true');
+  expect(await page.evaluate(()=>getSelection().toString())).toBe('beta');
+  await page.locator('[data-cmd="bold"]').click();
+  await expect(page.locator('#editor')).toHaveJSProperty('innerHTML','<p>alpha beta gamma</p>');
+  expect(await page.evaluate(()=>getSelection().toString())).toBe('beta')
+});
+
+test('link prompt preserves selection and block conversion stays in place',async({page})=>{
+  await web(page);await setEditor(page,'<p>alpha beta gamma</p>');await selectText(page,'beta');
+  page.once('dialog',dialog=>dialog.accept('https://example.com/x'));
+  await page.locator('#link').click();
+  await expect(page.locator('#editor a')).toHaveText('beta');
+  await expect(page.locator('#editor a')).toHaveAttribute('href','https://example.com/x');
+  await selectText(page,'alpha');
+  await page.locator('#block').selectOption('h2');
+  await expect(page.locator('#editor > h2')).toHaveCount(1);
+  await expect(page.locator('#editor > h2')).toContainText('alpha');
+  await expect(page.locator('#editor > *')).toHaveCount(1)
+});
+
+test('list transaction survives undo and redo without phantom blocks',async({page})=>{
+  await web(page);await setEditor(page,'<p>one</p><p>two</p>');await selectAll(page);
+  await page.locator('#more').click();await page.locator('[data-action="ul"]').click();
+  await expect(page.locator('#editor > ul > li')).toHaveCount(2);
+  await page.locator('#editor').press('Control+z');
+  await expect(page.locator('#editor > p')).toHaveCount(2);
+  await page.locator('#editor').press('Control+Shift+z');
+  await expect(page.locator('#editor > ul > li')).toHaveCount(2);
+  expect(await page.locator('#editor').evaluate(el=>[...el.childNodes].filter(n=>n.nodeType===3&&n.textContent.trim()).length)).toBe(0)
+});
+
+test('drawer and preview do not mutate the document and restore focus',async({page})=>{
+  await web(page);await setEditor(page,'<h2>Título</h2><p>Texto <strong>forte</strong></p>');
+  const before=await page.locator('#editor').evaluate(el=>el.innerHTML);
+  await page.locator('#more').focus();await page.locator('#more').click();
+  await expect(page.locator('#drawer')).toHaveAttribute('aria-hidden','false');
+  await expect(page.locator('#more')).toHaveAttribute('aria-expanded','true');
+  expect(await page.locator('.app').evaluate(el=>el.inert)).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#drawer')).toHaveAttribute('aria-hidden','true');
+  await expect(page.locator('#more')).toBeFocused();
+  expect(await page.locator('#editor').evaluate(el=>el.innerHTML)).toBe(before);
+  await page.locator('#previewBtn').click();
+  await expect(page.locator('#editWrap')).toBeHidden();
+  await expect(page.locator('#preview')).toContainText('Texto forte');
+  await expect(page.locator('#previewBtn')).toHaveAttribute('aria-pressed','true');
+  await page.locator('#previewBtn').click();
+  await expect(page.locator('#editWrap')).toBeVisible();
+  await expect(page.locator('#editor')).toBeFocused();
+  expect(await page.locator('#editor').evaluate(el=>el.innerHTML)).toBe(before)
+});
+
+test('checkpoint persists the canonical document across reload',async({page})=>{
+  await web(page);await setEditor(page,'<h3>Persistente</h3><p>Depois do reload.</p>');
+  await page.locator('#save').click();
+  await expect(page.locator('#status')).toContainText('Salvo');
+  await page.reload();await waitReady(page);
+  await expect(page.locator('#editor > h3')).toHaveText('Persistente');
+  await expect(page.locator('#editor')).toContainText('Depois do reload.')
+});
+
+test('paste sanitization removes executable markup',async({page})=>{
+  await web(page);await setEditor(page,'<p>Base</p>');await page.locator('#editor').click();
+  await page.locator('#editor').evaluate(el=>{
+    const event=new Event('paste',{bubbles:true,cancelable:true});
+    Object.defineProperty(event,'clipboardData',{value:{getData:type=>type==='text/html'?'<p><strong>Seguro</strong><script>window.pwned=1</script></p>':''}});
+    el.dispatchEvent(event)
+  });
+  await expect(page.locator('#editor script')).toHaveCount(0);
+  expect(await page.evaluate(()=>window.pwned)).toBeUndefined();
+  await expect(page.locator('#editor')).toContainText('Seguro')
+});
+
+test('responsive geometry remains usable from 320px through desktop width',async({page})=>{
+  await web(page);
+  for(const width of [320,360,390,1024]){
+    await page.setViewportSize({width,height:844});
+    const geometry=await page.evaluate(()=>{
+      const items=[...document.querySelectorAll('.bar > .blockPick,.bar > button')].map(el=>el.getBoundingClientRect());
+      const bar=document.querySelector('.bar'),editor=document.querySelector('#editor');
+      return{
+        items:items.map(x=>({w:x.width,h:x.height})),
+        count:items.length,
+        bodyOverflow:document.documentElement.scrollWidth-window.innerWidth,
+        barScrollable:bar.scrollWidth>=bar.clientWidth,
+        font:getComputedStyle(editor).fontSize,
+        overflowDisplay:getComputedStyle(document.querySelector('.barOverflow')).display
+      }
+    });
+    expect(geometry.count).toBe(8);
+    expect(geometry.items.every(x=>x.w>=44&&x.h>=44)).toBe(true);
+    expect(geometry.bodyOverflow).toBeLessThanOrEqual(0);
+    expect(geometry.barScrollable).toBe(true);
+    expect(geometry.font).toBe('16px');
+    if(width>=620)expect(geometry.overflowDisplay).toBe('flex');else expect(geometry.overflowDisplay).toBe('none')
+  }
+});
+
+test('caret and focus survive viewport resize and theme changes dynamically',async({page})=>{
+  await web(page);await setEditor(page,'<p>abcdef</p>');
+  await page.locator('#editor').evaluate(el=>{
+    const n=el.querySelector('p').firstChild,r=document.createRange();r.setStart(n,3);r.collapse(true);
+    const s=getSelection();s.removeAllRanges();s.addRange(r);el.focus();document.dispatchEvent(new Event('selectionchange'))
+  });
+  await page.setViewportSize({width:320,height:620});
+  const caret=await page.evaluate(()=>({active:document.activeElement?.id,text:getSelection().anchorNode?.data,offset:getSelection().anchorOffset}));
+  expect(caret).toEqual({active:'editor',text:'abcdef',offset:3});
+  await page.emulateMedia({colorScheme:'dark'});await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+  await page.emulateMedia({colorScheme:'light'});await expect(page.locator('html')).toHaveAttribute('data-theme','light')
+});
+
+test('Telegram lifecycle uses native controls, stable viewport and safe areas',async({page})=>{
+  await telegram(page);
+  await expect(page.locator('html')).toHaveAttribute('data-host','telegram');
+  await expect(page.locator('.top')).toBeHidden();
+  expect(await page.evaluate(()=>({ready:__tg.readyCalled,expand:__tg.expandCalled,fullscreen:__tg.fullscreenRequested,main:__tg.MainButton.isVisible,text:__tg.MainButton.text})))
+    .toEqual({ready:true,expand:true,fullscreen:true,main:true,text:'Enviar'});
+  expect(await page.locator('html').evaluate(el=>el.style.getPropertyValue('--rmd-app-height'))).toBe('700px');
+  await page.evaluate(()=>{__tg.viewportHeight=410;__tg.emit('viewportChanged',{isStateStable:false})});
+  expect(await page.locator('html').evaluate(el=>el.style.getPropertyValue('--rmd-app-height'))).toBe('700px');
+  await page.evaluate(()=>{__tg.viewportStableHeight=610;__tg.emit('viewportChanged',{isStateStable:true})});
+  expect(await page.locator('html').evaluate(el=>el.style.getPropertyValue('--rmd-app-height'))).toBe('610px');
+  await page.evaluate(()=>{__tg.contentSafeAreaInset={top:11,right:12,bottom:13,left:14};__tg.emit('contentSafeAreaChanged')});
+  expect(await page.locator('html').evaluate(el=>el.style.getPropertyValue('--rmd-content-bottom'))).toBe('13px');
+  await page.locator('#more').click();expect(await page.evaluate(()=>__tg.BackButton.isVisible)).toBe(true);
+  await page.evaluate(()=>__tg.BackButton.handler());
+  await expect(page.locator('#drawer')).toHaveAttribute('aria-hidden','true');
+  expect(await page.evaluate(()=>__tg.BackButton.isVisible)).toBe(false);
+  await page.evaluate(()=>{__tg.colorScheme='light';__tg.emit('themeChanged')});
+  await expect(page.locator('html')).toHaveAttribute('data-theme','light')
+});
+
+test('Telegram MainButton sends raw initData through the application boundary',async({page})=>{
+  let body;
+  await page.route('**/api/send',async route=>{
+    body=route.request().postDataJSON();
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,result:{message_id:77}})})
+  });
+  await telegram(page);await setEditor(page,'<h2>Enviar</h2><p>Mensagem</p>');
+  page.once('dialog',dialog=>dialog.accept('42'));
+  await page.evaluate(()=>__tg.MainButton.handler());
+  await expect.poll(()=>body).not.toBeUndefined();
+  expect(body.initData).toBe('signed-raw-data');expect(body.chatId).toBe('42');
+  expect(body.html).toContain('<h2>Enviar</h2>');
+  expect(body.requestId).toMatch(/^(?:[0-9a-f-]{36}|send-)/);
+  await expect.poll(()=>page.evaluate(()=>({active:__tg.MainButton.isActive,progress:__tg.MainButton.isProgressVisible,haptic:__tg.HapticFeedback.type})))
+    .toEqual({active:true,progress:false,haptic:'success'})
+});
+
+test('start parameter claims a transferred document exactly through the Telegram bridge',async({page})=>{
+  const token='a'.repeat(32);let body;
+  await page.route('**/api/transfers/claim',async route=>{
+    body=route.request().postDataJSON();
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,transfer:{
+      html:'<h2>Transferido</h2><p>Continuidade</p>',isRtl:false,skipEntityDetection:false,
+      document:{id:'00000000-0000-4000-8000-000000000001',revision:7},expiresAt:Date.now()+60000
+    }})})
+  });
+  await telegram(page,{path:'/?tgWebAppStartParam='+token});
+  await expect(page.locator('#editor > h2')).toHaveText('Transferido');
+  await expect.poll(()=>body).not.toBeUndefined();
+  expect(body).toEqual({token,initData:'signed-raw-data'});
+  expect(new URL(page.url()).searchParams.has('tgWebAppStartParam')).toBe(false)
+});
+
+test('Web handoff sends document identity before navigating to Telegram',async({page})=>{
+  const token='b'.repeat(32);let body;
+  await page.route('**/api/transfers',async route=>{
+    body=route.request().postDataJSON();
+    await route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({ok:true,token,expiresAt:Date.now()+60000,telegramUrl:'https://t.me/rmdtxtml_test_bot?startapp='+token})})
+  });
+  await page.route(/https:\/\/t\.me\/.*/,route=>route.fulfill({status:200,contentType:'text/html',body:'<html><body>Telegram</body></html>'}));
+  await web(page);await setEditor(page,'<h2>Web</h2><p>Continua no Telegram</p>');
+  await expect(page.locator('#send')).toHaveText('Abrir no Telegram');
+  await page.locator('#send').click();
+  await expect.poll(()=>body).not.toBeUndefined();
+  expect(body.html).toContain('<h2>Web</h2>');
+  expect(body.document.id).toMatch(/^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/);
+  await page.waitForURL(/t\.me\/rmdtxtml_test_bot/)
+});
