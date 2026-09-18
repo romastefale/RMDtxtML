@@ -48,8 +48,8 @@ async function json(path,{method='GET',body,auth=false}={}){
   }
   const response=await fetch(api()+path,{method,headers,body:payload});
   const data=await response.json().catch(()=>null);
-  if(!data)throw new Error(`Resposta inválida do servidor (HTTP ${response.status})`);
-  if(!response.ok||!data.ok)throw new Error(data.error||`HTTP ${response.status}`);
+  if(!data){const error=new Error(`Resposta inválida do servidor (HTTP ${response.status})`);error.status=response.status;throw error}
+  if(!response.ok||!data.ok){const error=new Error(data.error||`HTTP ${response.status}`);error.status=response.status;error.info=data;throw error}
   return data
 }
 window.RMD=window.RMD||{};
