@@ -108,6 +108,13 @@ test('web transfer is durable-store backed, opaque, authenticated and one-time',
   })
 });
 
+test('web transfer rejects malformed semantic payload instead of storing it',async()=>{
+  await withServer(fetch,async base=>{
+    const response=await post(base,'/api/transfers',{html:'<p>x</p>',semantic:{schema:2,format:'wrong',model:{type:'doc'}}});
+    assert.equal(response.status,400);const body=await response.json();assert.match(body.error,/semântico inválido/)
+  })
+});
+
 test('browser API writes reject untrusted Origin',async()=>{
   await withServer(fetch,async base=>{
     const transfer=await post(base,'/api/transfers',{html:'<p>x</p>'},'https://evil.example');
