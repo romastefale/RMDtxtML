@@ -22,7 +22,8 @@ function telegram(overrides={}){
     onEvent(name,fn){handlers.set(name,fn)},emit(name,data){handlers.get(name)?.(data)},
     ready(){this.readyCalled=true},expand(){this.expandCalled=true},requestFullscreen(){this.fullscreenRequested=true},
     setHeaderColor(v){this.header=v},setBackgroundColor(v){this.background=v},setBottomBarColor(v){this.bottom=v},
-    enableClosingConfirmation(){this.closing=true},disableClosingConfirmation(){this.closing=false},hideKeyboard(){this.keyboardHidden=true},
+    enableClosingConfirmation(){this.closing=true},disableClosingConfirmation(){this.closing=false},hideKeyboard(){this.keyboardHidden=true},close(){this.closed=true},
+    colorScheme:'dark',HapticFeedback:{notificationOccurred(type){this.type=type}},
     ...overrides
   }
 }
@@ -72,7 +73,9 @@ test('native back and main buttons are controlled by one platform boundary',asyn
   assert.equal(tg.MainButton.text,'Enviar');assert.equal(tg.MainButton.visible,true);assert.equal(tg.MainButton.active,false);assert.equal(tg.MainButton.progress,true);
   tg.MainButton.active=true;tg.MainButton.handler();assert.equal(mains,1);
   env.platform.dirty(true);assert.equal(tg.closing,true);env.platform.dirty(false);assert.equal(tg.closing,false);
-  env.platform.keyboard();assert.equal(tg.keyboardHidden,true)
+  env.platform.keyboard();assert.equal(tg.keyboardHidden,true);
+  env.platform.haptic('success');assert.equal(tg.HapticFeedback.type,'success');
+  assert.equal(env.platform.colorScheme(),'dark');env.platform.close();assert.equal(tg.closed,true)
 });
 
 test('web viewport tracks visualViewport without Telegram controls',async()=>{
