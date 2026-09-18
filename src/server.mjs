@@ -53,20 +53,28 @@ function transferDocument(input){
   return{id,revision:Number.isSafeInteger(revision)&&revision>=0?revision:0}
 }
 function validRequestId(value){return typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_-]{15,79}$/.test(value)}
+function transferSemantic(input){
+  if(input===undefined||input===null)return null;
+  if(typeof input!=='object'||input.schema!==2||input.format!=='semantic'||!input.model||typeof input.model!=='object')return false;
+  let encoded;try{encoded=JSON.stringify(input.model)}catch{return false}
+  if(encoded.length>300000)return false;
+  return{schema:2,format:'semantic',model:input.model}
+}
 
 async function createTransfer(req,res,{botToken,env,fetchImpl,headers,data}){
   if(!trustedOrigin(req,env))return json(res,403,{ok:false,error:'Origem não autorizada'},headers);
   const gate=limit(data,'transfer:'+clientIp(req),env.TRANSFER_RATE_LIMIT);
   if(!gate.ok)return json(res,429,{ok:false,error:'Muitas transferências; tente novamente em instantes'},{...headers,'retry-after':gate.retryAfter});
-  const input=await bodyJson(req),checked=validateRichHtml(input.html);
+  const input=await bodyJson(req),checked=validateRichHtml(input.html),semantic=transferSemantic(input.semantic);
   if(!checked.ok)return json(res,400,{ok:false,error:`Conteúdo inválido: ${checked.error}`},headers);
+  if(semantic===false)return json(res,400,{ok:false,error:'Documento semântico inválido'},headers);
   let username;
   try{username=await botUsername(botToken,env,fetchImpl)}catch{return json(res,502,{ok:false,error:'Não foi possível identificar o bot'},headers)}
   if(!username)return json(res,503,{ok:false,error:'Bot sem username configurado'},headers);
   const token=crypto.randomBytes(24).toString('base64url');
   const ttl=Math.max(60,Math.min(3600,Number(env.TRANSFER_TTL_SECONDS||900)));
   const expiresAt=Date.now()+ttl*1000;
-  data.createTransfer({token,html:checked.html,isRtl:input.isRtl===true,skipEntityDetection:input.skipEntityDetection===true,document:transferDocument(input.document),expiresAt});
+  data.createTransfer({token,html:checked.html,isRtl:input.isRtl===true,skipEntityDetection:input.skipEntityDetection===true,document:transferDocument(input.document),semantic,expiresAt});
   return json(res,201,{ok:true,token,expiresAt,telegramUrl:`https://t.me/${encodeURIComponent(username)}?startapp=${token}`},headers)
 }
 
