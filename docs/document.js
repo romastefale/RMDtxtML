@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const DB='rmdtxtml',STORE='docs',KEY='current',SCHEMA=2,MAX_REVISIONS=30;
+const DB='rmdtxtml',STORE='docs',KEY='current',SCHEMA=2,MODEL_VERSION=1,MAX_REVISIONS=30;
 const EMPTY={type:'doc',content:[{type:'paragraph'}]};
 const now=()=>new Date().toISOString();
 const uid=()=>crypto.randomUUID?.()||('doc-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10));
@@ -7,7 +7,7 @@ const clone=x=>JSON.parse(JSON.stringify(x));
 const defaultNormalize=x=>clone(x&&typeof x==='object'?x:EMPTY);
 function base(model=EMPTY){
   const time=now();
-  return{schema:SCHEMA,id:uid(),format:'semantic',content:{model:clone(model)},options:{isRtl:false,skipEntityDetection:false},meta:{createdAt:time,updatedAt:time,revision:0},revisions:[]};
+  return{schema:SCHEMA,id:uid(),format:'semantic',content:{model:clone(model),modelVersion:MODEL_VERSION},options:{isRtl:false,skipEntityDetection:false},meta:{createdAt:time,updatedAt:time,revision:0},revisions:[]};
 }
 function legacyHtml(src){
   if(typeof src?.content?.html==='string')return src.content.html;
@@ -16,12 +16,15 @@ function legacyHtml(src){
 }
 function normalize(input,{normalizeModel=defaultNormalize,migrateHtml}={}){
   const src=input&&typeof input==='object'?input:{};
-  const legacy=legacyHtml(src);
-  let model=src?.schema===SCHEMA&&src?.format==='semantic'&&src?.content?.model
-    ?normalizeModel(src.content.model)
-    :legacy!==null&&typeof migrateHtml==='function'
-      ?normalizeModel(migrateHtml(legacy))
-      :normalizeModel(EMPTY);
+  const legacy=legacyHtml(src),semantic=src?.schema===SCHEMA&&src?.format==='semantic';
+  let model;
+  if(semantic){
+    if(!src?.content?.model||typeof src.content.model!=='object')throw new Error('invalid_document_model');
+    const declared=src.content.modelVersion;
+    if(declared!==undefined&&Number(declared)!==MODEL_VERSION)throw new Error('unsupported_model_version');
+    model=normalizeModel(src.content.model)
+  }else if(legacy!==null&&typeof migrateHtml==='function')model=normalizeModel(migrateHtml(legacy));
+  else model=normalizeModel(EMPTY);
   const doc=base(model);
   doc.id=typeof src.id==='string'&&src.id?src.id:doc.id;
   doc.options.isRtl=src.options?.isRtl===true||src.rtl===true;
@@ -32,18 +35,21 @@ function normalize(input,{normalizeModel=defaultNormalize,migrateHtml}={}){
   const rev=Number(src.meta?.revision);doc.meta.revision=Number.isSafeInteger(rev)&&rev>=0?rev:0;
   if(Array.isArray(src.revisions))doc.revisions=src.revisions.slice(-MAX_REVISIONS).map(r=>{
     const oldHtml=typeof r?.html==='string'?r.html:null;
-    const revisionModel=r?.model?normalizeModel(r.model):oldHtml!==null&&typeof migrateHtml==='function'?normalizeModel(migrateHtml(oldHtml)):normalizeModel(EMPTY);
+    if(!r?.model&&oldHtml===null)throw new Error('invalid_revision_model');
+    if(r?.modelVersion!==undefined&&Number(r.modelVersion)!==MODEL_VERSION)throw new Error('unsupported_model_version');
+    const revisionModel=r?.model?normalizeModel(r.model):normalizeModel(migrateHtml(oldHtml));
     return{
       revision:Number.isSafeInteger(Number(r.revision))?Number(r.revision):0,
       at:typeof r.at==='string'?r.at:now(),
       model:revisionModel,
+      modelVersion:MODEL_VERSION,
       options:{isRtl:r.options?.isRtl===true,skipEntityDetection:r.options?.skipEntityDetection===true}
     }
   });
   doc.meta.updatedAt=typeof src.meta?.updatedAt==='string'?src.meta.updatedAt:now();
   return doc
 }
-function snapshot(doc){return{revision:doc.meta.revision,at:now(),model:clone(doc.content.model),options:clone(doc.options)}}
+function snapshot(doc){return{revision:doc.meta.revision,at:now(),model:clone(doc.content.model),modelVersion:MODEL_VERSION,options:clone(doc.options)}}
 class Store{
   constructor({legacyKey='rmdtxtml-draft-v2',fallbackKey='rmdtxtml-document-v2',previousKey='rmdtxtml-document-v1'}={}){
     this.legacyKey=legacyKey;this.fallbackKey=fallbackKey;this.previousKey=previousKey;this.db=null;this.mode='pending'
@@ -123,5 +129,5 @@ function importDocument(text,{normalizeModel,migrateHtml}={}){
   return normalize(raw,{normalizeModel,migrateHtml})
 }
 window.RMD=window.RMD||{};
-Object.assign(window.RMD,{DocumentStore:Store,normalizeDocument:normalize,adoptTransferDocument:adoptTransfer,exportDocument,importDocument,DOCUMENT_SCHEMA:SCHEMA,EMPTY_DOCUMENT_MODEL:EMPTY});
+Object.assign(window.RMD,{DocumentStore:Store,normalizeDocument:normalize,adoptTransferDocument:adoptTransfer,exportDocument,importDocument,DOCUMENT_SCHEMA:SCHEMA,DOCUMENT_MODEL_VERSION:MODEL_VERSION,EMPTY_DOCUMENT_MODEL:EMPTY});
 })();
