@@ -52,8 +52,9 @@ for(const b of $$('[data-action]')){
   const id=menuIcons[b.dataset.action];if(id&&!b.querySelector('svg'))b.insertAdjacentHTML('afterbegin',`<svg class="menuIcon" aria-hidden="true"><use href="#i-${id}"/></svg>`)
 }
 for(const b of $$('button[title]:not([aria-label])'))b.setAttribute('aria-label',b.title);
-function insertHtml(html){core.insert(html)}
-function addBlock(html){core.blockHtml(html)}
+const textSpec=(text,marks=[])=>({type:'text',text:String(text),...(marks.length?{marks}:{})});
+const paragraphSpec=(text='')=>({type:'paragraph',...(text?{content:[textSpec(text)]}:{})});
+const insertSpec=spec=>core.insertSpec(spec)
 function wrap(tag,attrs={}){if(!core.format(tag,attrs))say('Selecione um trecho primeiro')}
 function run(command){const map={bold:'strong',italic:'em',underline:'u',strikeThrough:'s'};if(map[command])return wrap(map[command]);if(command==='undo')return core.undo();if(command==='redo')return core.redo()}
 function promptHttp(label,initial='https://'){const v=prompt(label,initial);if(v===null)return null;if(!/^https?:\/\//i.test(v)){say('Use uma URL HTTP ou HTTPS');return null}return v}
@@ -78,7 +79,7 @@ document.addEventListener('selectionchange',()=>{if(core.ownsSelection())syncEdi
 document.addEventListener('pointerdown',e=>{if(e.target.closest('.bar,.drawer,.bottom'))core.remember()},{capture:true});
 $$('[data-cmd]').forEach(b=>{if(!b.hasAttribute('aria-pressed'))b.setAttribute('aria-pressed','false');b.addEventListener('click',()=>{run(b.dataset.cmd);queueMicrotask(syncEditorUi)})});
 $('#block').addEventListener('change',e=>{core.block(e.target.value);queueMicrotask(syncEditorUi)});
-$('#link').onclick=()=>{const r=core.range(),text=r?.toString()||'',u=prompt('URL','https://t.me/');if(!u)return;if(!validHref(u))return say('URL não suportada');if(r&&!r.collapsed)wrap('a',{href:u});else insertHtml(`<a href="${esc(u)}">${esc(text||'Telegram')}</a>`)};
+$('#link').onclick=()=>{const r=core.range(),text=r?.toString()||'',u=prompt('URL','https://t.me/');if(!u)return;if(!validHref(u))return say('URL não suportada');if(r&&!r.collapsed)wrap('a',{href:u});else core.insertText(text||'Telegram',[{type:'link',attrs:{href:u}}])};
 $('#code').onclick=()=>wrap('code');
 $('#spoiler').onclick=()=>wrap('tg-spoiler');
 $('#mark').onclick=()=>wrap('mark');
@@ -125,27 +126,43 @@ const actions={
   ul:()=>core.list('ul'),
   ol:()=>core.list('ol'),
   task:()=>core.taskList([{text:'Tarefa',checked:false},{text:'Concluída',checked:true}]),
-  quote:()=>addBlock('<blockquote>Citação<cite>Autor</cite></blockquote>'),
-  expandable:()=>addBlock('<blockquote expandable>Citação expansível<br>Conteúdo adicional<cite>Autor</cite></blockquote>'),
-  pullquote:()=>addBlock('<aside>Trecho em destaque<cite>Autor</cite></aside>'),
-  details:()=>{const title=prompt('Título','Detalhes'),body=prompt('Conteúdo','Conteúdo recolhível.');if(title!==null&&body!==null)addBlock(`<details><summary>${esc(title)}</summary><p>${esc(body)}</p></details>`)},
-  pre:()=>{const lang=safeName(prompt('Linguagem (opcional)','javascript')||''),code=prompt('Código','console.log("Olá")');if(code!==null)addBlock(lang?`<pre><code class="language-${esc(lang)}">${esc(code)}</code></pre>`:`<pre>${esc(code)}</pre>`)},
-  divider:()=>addBlock('<hr>'),
-  math:()=>{const x=prompt('Fórmula LaTeX','x^2 + y^2');if(x)insertHtml(`<tg-math>${esc(x)}</tg-math>`)},
-  mathblock:()=>{const x=prompt('Fórmula LaTeX','E = mc^2');if(x)addBlock(`<tg-math-block>${esc(x)}</tg-math-block>`)},
-  table:()=>{const rows=Math.max(1,Math.min(100,+prompt('Linhas','3')||1)),cols=Math.max(1,Math.min(20,+prompt('Colunas','3')||1));let h='<table bordered compact><tr>'+Array.from({length:cols},(_,i)=>`<th>Cabeçalho ${i+1}</th>`).join('')+'</tr>';for(let r=1;r<rows;r++)h+='<tr>'+Array.from({length:cols},()=>'<td>Célula</td>').join('')+'</tr>';addBlock(h+'</table>')},
-  image:()=>{const u=promptHttp('URL HTTPS da imagem');if(u)addBlock(`<figure><img src="${esc(u)}" alt="Imagem"><figcaption>Imagem</figcaption></figure>`)},
-  video:()=>{const u=promptHttp('URL HTTPS do vídeo');if(u)addBlock(`<figure><video src="${esc(u)}"></video><figcaption>Vídeo</figcaption></figure>`)},
-  audio:()=>{const u=promptHttp('URL HTTPS do áudio');if(u)addBlock(`<figure><audio src="${esc(u)}"></audio><figcaption>Áudio</figcaption></figure>`)},
-  document:()=>{const u=promptHttp('URL HTTPS do documento');if(u)addBlock(`<figure><tg-document src="${esc(u)}"></tg-document><figcaption>Documento</figcaption></figure>`)},
-  map:()=>{const lat=Number(prompt('Latitude','-23.5505')),lon=Number(prompt('Longitude','-46.6333')),zoom=Math.max(0,Math.min(24,+prompt('Zoom (0–24)','14')||14));if(Number.isFinite(lat)&&Number.isFinite(lon))addBlock(`<tg-map lat="${lat}" long="${lon}" zoom="${zoom}"></tg-map>`)},
-  collage:()=>{const a=promptHttp('Primeira imagem'),b=promptHttp('Segunda imagem');if(a&&b)addBlock(`<tg-collage><img src="${esc(a)}" alt="Imagem 1"><img src="${esc(b)}" alt="Imagem 2"><figcaption>Collage</figcaption></tg-collage>`)},
-  slideshow:()=>{const a=promptHttp('Primeira imagem'),b=promptHttp('Segunda imagem');if(a&&b)addBlock(`<tg-slideshow><img src="${esc(a)}" alt="Slide 1"><img src="${esc(b)}" alt="Slide 2"><figcaption>Slideshow</figcaption></tg-slideshow>`)},
-  reference:()=>{const name=safeName(prompt('Identificador da referência','nota-1')),text=prompt('Texto da referência','Fonte ou nota');if(name&&text!==null)addBlock(`<tg-reference name="${esc(name)}">${esc(text)}</tg-reference>`)},
-  anchor:()=>{const name=safeName(prompt('Nome da âncora','secao-1'));if(name)insertHtml(`<a name="${esc(name)}"></a>`)},
-  time:()=>{const unix=Math.floor(Date.now()/1000),value=prompt('Unix timestamp',String(unix)),label=prompt('Texto exibido','Data e hora');if(value&&/^\d+$/.test(value)&&label!==null)insertHtml(`<tg-time unix="${value}" format="wDT">${esc(label)}</tg-time>`)},
-  emoji:()=>{const id=prompt('Custom emoji ID','5368324170671202286'),fallback=prompt('Emoji alternativo','👍');if(id&&/^\d+$/.test(id)&&fallback)addBlock(`<p><tg-emoji emoji-id="${id}">${esc(fallback)}</tg-emoji></p>`)},
-  button:()=>{const type=(prompt('Tipo: url, web_app, copy_text, switch_inline_query, disabled','url')||'').trim();const label=prompt('Texto do botão','Abrir');if(!label)return;let attrs=`type="${esc(type)}"`;if(type==='url'||type==='web_app'){const u=promptHttp('URL HTTPS');if(!u)return;attrs+=` url="${esc(u)}"`}else if(type==='copy_text'){const t=prompt('Texto para copiar','Texto');if(t===null)return;attrs+=` text="${esc(t)}"`}else if(type==='switch_inline_query'){const q=prompt('Consulta inline','');attrs+=` query="${esc(q||'')}"`}else if(type!=='disabled'){say('Tipo não suportado neste editor');return}addBlock(`<tg-button-row align="center"><tg-button ${attrs}>${esc(label)}</tg-button></tg-button-row>`)},
+  quote:()=>insertSpec({type:'blockquote',attrs:{expandable:false},content:[{type:'paragraph',content:[textSpec('Citação '),textSpec('Autor',[{type:'cite'}])]}]}),
+  expandable:()=>insertSpec({type:'blockquote',attrs:{expandable:true},content:[paragraphSpec('Citação expansível'),{type:'paragraph',content:[textSpec('Conteúdo adicional '),textSpec('Autor',[{type:'cite'}])]}]}),
+  pullquote:()=>insertSpec({type:'pullquote',content:[textSpec('Trecho em destaque '),textSpec('Autor',[{type:'cite'}])]}),
+  details:()=>{const summary=prompt('Título','Detalhes'),body=prompt('Conteúdo','Conteúdo recolhível.');if(summary!==null&&body!==null)insertSpec({type:'details',attrs:{summary,body,open:false}})},
+  pre:()=>{const language=safeName(prompt('Linguagem (opcional)','javascript')||''),code=prompt('Código','console.log("Olá")');if(code!==null)insertSpec({type:'code_block',attrs:{language},...(code?{content:[textSpec(code)]}:{})})},
+  divider:()=>insertSpec({type:'divider'}),
+  math:()=>{const expression=prompt('Fórmula LaTeX','x^2 + y^2');if(expression)insertSpec({type:'math_inline',attrs:{expression}})},
+  mathblock:()=>{const expression=prompt('Fórmula LaTeX','E = mc^2');if(expression)insertSpec({type:'math_block',attrs:{expression}})},
+  table:()=>{
+    const rows=Math.max(1,Math.min(100,+prompt('Linhas','3')||1)),cols=Math.max(1,Math.min(20,+prompt('Colunas','3')||1));
+    const content=Array.from({length:rows},(_,row)=>({type:'table_row',content:Array.from({length:cols},(_,col)=>({
+      type:row===0?'table_header':'table_cell',
+      attrs:{colspan:1,rowspan:1,align:'',valign:''},
+      content:[textSpec(row===0?'Cabeçalho '+(col+1):'Célula')]
+    }))}));
+    insertSpec({type:'table',attrs:{bordered:true,striped:false,compact:true},content})
+  },
+  image:()=>{const src=promptHttp('URL HTTPS da imagem');if(src)insertSpec({type:'image',attrs:{src,caption:'Imagem',alt:'Imagem',spoiler:false}})},
+  video:()=>{const src=promptHttp('URL HTTPS do vídeo');if(src)insertSpec({type:'video',attrs:{src,caption:'Vídeo',alt:'',spoiler:false}})},
+  audio:()=>{const src=promptHttp('URL HTTPS do áudio');if(src)insertSpec({type:'audio',attrs:{src,caption:'Áudio',alt:'',spoiler:false}})},
+  document:()=>{const src=promptHttp('URL HTTPS do documento');if(src)insertSpec({type:'document',attrs:{src,caption:'Documento'}})},
+  map:()=>{const lat=Number(prompt('Latitude','-23.5505')),long=Number(prompt('Longitude','-46.6333')),zoom=Math.max(0,Math.min(24,+prompt('Zoom (0–24)','14')||14));if(Number.isFinite(lat)&&Number.isFinite(long))insertSpec({type:'map',attrs:{lat,long,zoom}})},
+  collage:()=>{const a=promptHttp('Primeira imagem'),b=promptHttp('Segunda imagem');if(a&&b)insertSpec({type:'collage',attrs:{items:[{src:a,alt:'Imagem 1'},{src:b,alt:'Imagem 2'}],caption:'Collage'}})},
+  slideshow:()=>{const a=promptHttp('Primeira imagem'),b=promptHttp('Segunda imagem');if(a&&b)insertSpec({type:'slideshow',attrs:{items:[{src:a,alt:'Slide 1'},{src:b,alt:'Slide 2'}],caption:'Slideshow'}})},
+  reference:()=>{const name=safeName(prompt('Identificador da referência','nota-1')),text=prompt('Texto da referência','Fonte ou nota');if(name&&text!==null)core.insertText(text,[{type:'reference',attrs:{name}}])},
+  anchor:()=>{const name=safeName(prompt('Nome da âncora','secao-1'));if(name)insertSpec({type:'anchor',attrs:{name}})},
+  time:()=>{const unix=String(prompt('Unix timestamp',String(Math.floor(Date.now()/1000)))||''),label=prompt('Texto exibido','Data e hora');if(/^\d+$/.test(unix)&&label!==null)insertSpec({type:'time',attrs:{unix,format:'wDT',label}})},
+  emoji:()=>{const emojiId=prompt('Custom emoji ID','5368324170671202286'),fallback=prompt('Emoji alternativo','👍');if(emojiId&&/^\d+$/.test(emojiId)&&fallback)insertSpec({type:'custom_emoji',attrs:{emojiId,fallback}})},
+  button:()=>{
+    const type=(prompt('Tipo: url, web_app, copy_text, switch_inline_query, disabled','url')||'').trim(),label=prompt('Texto do botão','Abrir');if(!label)return;
+    const button={type,label,style:'',url:'',data:'',text:'',query:''};
+    if(type==='url'||type==='web_app'){const value=promptHttp('URL HTTPS');if(!value)return;button.url=value}
+    else if(type==='copy_text'){const value=prompt('Texto para copiar','Texto');if(value===null)return;button.text=value}
+    else if(type==='switch_inline_query'){button.query=prompt('Consulta inline','')||''}
+    else if(type!=='disabled'){say('Tipo não suportado neste editor');return}
+    insertSpec({type:'button_row',attrs:{align:'center',buttons:[button]}})
+  },
   rtl:()=>{rtl=!rtl;applyOptions();dirty()},
   entities:()=>{skipEntityDetection=!skipEntityDetection;applyOptions();dirty()},
   export:()=>{syncDoc();const blob=new Blob([RMD.exportDocument(doc)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='RMDtxtML.rmdtxtml';a.click();URL.revokeObjectURL(url)},
