@@ -1,6 +1,5 @@
 FROM mcr.microsoft.com/playwright:v1.63.0-noble AS test
 WORKDIR /app
-COPY --from=test /tmp/rmdtxtml-qa-passed /tmp/rmdtxtml-qa-passed
 COPY package.json ./
 RUN npm install --ignore-scripts --no-audit --no-fund
 COPY src ./src
@@ -21,6 +20,7 @@ RUN node --check docs/platform.js \
 
 FROM node:22-alpine
 WORKDIR /app
+COPY --from=test /tmp/rmdtxtml-qa-passed /tmp/rmdtxtml-qa-passed
 COPY package.json ./
 COPY src ./src
 COPY docs ./docs
