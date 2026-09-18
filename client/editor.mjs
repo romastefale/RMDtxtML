@@ -35,13 +35,17 @@ const marks={
   }
 };
 
-const mediaNode=(tag,type)=>({
+const mediaAttrs=(el,figure=el.closest('figure'))=>{
+  const src=media(el.getAttribute('src'));if(!src)return false;
+  return{src,caption:figure?.querySelector(':scope > figcaption')?.textContent||'',alt:el.getAttribute('alt')||'',spoiler:el.hasAttribute('tg-spoiler')}
+};
+const mediaNode=tag=>({
   group:'block',atom:true,selectable:true,
   attrs:{src:{default:''},caption:{default:''},alt:{default:''},spoiler:{default:false}},
-  parseDOM:[{tag,getAttrs:el=>{
-    const src=media(el.getAttribute('src'));if(!src)return false;
-    return{src,caption:el.closest('figure')?.querySelector('figcaption')?.textContent||'',alt:el.getAttribute('alt')||'',spoiler:el.hasAttribute('tg-spoiler')}
-  }}],
+  parseDOM:[
+    {tag:'figure',getAttrs:figure=>{const el=figure.querySelector(':scope > '+tag);return el?mediaAttrs(el,figure):false}},
+    {tag,getAttrs:el=>mediaAttrs(el)}
+  ],
   toDOM:node=>['figure',{},[tag,{src:node.attrs.src,...(node.attrs.alt?{alt:node.attrs.alt}:{}),...(node.attrs.spoiler?{'tg-spoiler':''}:{})}],
     ...(node.attrs.caption?[['figcaption',node.attrs.caption]]:[])]
 });
@@ -104,12 +108,15 @@ const nodes={
     parseDOM:[{tag:'tg-time[unix]',getAttrs:el=>({unix:el.getAttribute('unix')||'',format:el.getAttribute('format')||'wDT',label:el.textContent||''})}],
     toDOM:node=>['tg-time',{unix:node.attrs.unix,format:node.attrs.format},node.attrs.label]
   },
-  image:mediaNode('img','image'),
-  video:mediaNode('video','video'),
-  audio:mediaNode('audio','audio'),
+  image:mediaNode('img'),
+  video:mediaNode('video'),
+  audio:mediaNode('audio'),
   document:{
     group:'block',atom:true,attrs:{src:{default:''},caption:{default:''}},
-    parseDOM:[{tag:'tg-document',getAttrs:el=>{const src=media(el.getAttribute('src'));return src?{src,caption:el.closest('figure')?.querySelector('figcaption')?.textContent||''}:false}}],
+    parseDOM:[
+      {tag:'figure',getAttrs:figure=>{const el=figure.querySelector(':scope > tg-document');if(!el)return false;const src=media(el.getAttribute('src'));return src?{src,caption:figure.querySelector(':scope > figcaption')?.textContent||''}:false}},
+      {tag:'tg-document',getAttrs:el=>{const src=media(el.getAttribute('src'));return src?{src,caption:el.closest('figure')?.querySelector(':scope > figcaption')?.textContent||''}:false}}
+    ],
     toDOM:node=>['figure',{},['tg-document',{src:node.attrs.src}],...(node.attrs.caption?[['figcaption',node.attrs.caption]]:[])]
   },
   map:{
