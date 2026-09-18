@@ -1,9 +1,19 @@
 {
   "name": "rmdtxtml",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Telegram Mini App rich-message editor for Bot API 10.3",
-  "engines": {"node": ">=22"},
-  "scripts": {"start": "node src/server.mjs", "test": "node --test"}
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test:unit": "node --test test/*.test.mjs",
+    "test:e2e": "playwright test",
+    "test": "npm run test:unit && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
 }
