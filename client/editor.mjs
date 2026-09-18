@@ -38,10 +38,10 @@ const marks={
 const mediaNode=(tag,type)=>({
   group:'block',atom:true,selectable:true,
   attrs:{src:{default:''},caption:{default:''},alt:{default:''},spoiler:{default:false}},
-  parseDOM:[{tag,getAttrs:el=>({
-    src:media(el.getAttribute('src'))||'',caption:el.closest('figure')?.querySelector('figcaption')?.textContent||'',
-    alt:el.getAttribute('alt')||'',spoiler:el.hasAttribute('tg-spoiler')
-  })}],
+  parseDOM:[{tag,getAttrs:el=>{
+    const src=media(el.getAttribute('src'));if(!src)return false;
+    return{src,caption:el.closest('figure')?.querySelector('figcaption')?.textContent||'',alt:el.getAttribute('alt')||'',spoiler:el.hasAttribute('tg-spoiler')}
+  }}],
   toDOM:node=>['figure',{},[tag,{src:node.attrs.src,...(node.attrs.alt?{alt:node.attrs.alt}:{}),...(node.attrs.spoiler?{'tg-spoiler':''}:{})}],
     ...(node.attrs.caption?[['figcaption',node.attrs.caption]]:[])]
 });
@@ -109,7 +109,7 @@ const nodes={
   audio:mediaNode('audio','audio'),
   document:{
     group:'block',atom:true,attrs:{src:{default:''},caption:{default:''}},
-    parseDOM:[{tag:'tg-document',getAttrs:el=>({src:media(el.getAttribute('src'))||'',caption:el.closest('figure')?.querySelector('figcaption')?.textContent||''})}],
+    parseDOM:[{tag:'tg-document',getAttrs:el=>{const src=media(el.getAttribute('src'));return src?{src,caption:el.closest('figure')?.querySelector('figcaption')?.textContent||''}:false}}],
     toDOM:node=>['figure',{},['tg-document',{src:node.attrs.src}],...(node.attrs.caption?[['figcaption',node.attrs.caption]]:[])]
   },
   map:{
@@ -175,9 +175,39 @@ function parseHtml(html){
   const box=cleanContainer(html),doc=PMDOMParser.fromSchema(schema).parse(box);
   return normalizeModel(doc.toJSON())
 }
+function assertSafeModel(node){
+  node.check();
+  node.descendants(child=>{
+    for(const mark of child.marks||[]){
+      if(mark.type===schema.marks.link&&!url(mark.attrs.href))throw new RangeError('unsafe_link');
+      if(mark.type===schema.marks.reference&&!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(String(mark.attrs.name||'')))throw new RangeError('invalid_reference')
+    }
+    const a=child.attrs||{},name=child.type.name;
+    if(name==='heading'&&(!Number.isInteger(a.level)||a.level<1||a.level>6))throw new RangeError('invalid_heading');
+    if(['image','video','audio','document'].includes(name)&&!media(a.src))throw new RangeError('invalid_media');
+    if(name==='anchor'&&!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(String(a.name||'')))throw new RangeError('invalid_anchor');
+    if(name==='custom_emoji'&&!/^\d+$/.test(String(a.emojiId||'')))throw new RangeError('invalid_emoji');
+    if(name==='time'&&!/^\d+$/.test(String(a.unix||'')))throw new RangeError('invalid_time');
+    if(name==='map'&&(!Number.isFinite(a.lat)||a.lat<-90||a.lat>90||!Number.isFinite(a.long)||a.long<-180||a.long>180||!Number.isFinite(a.zoom)||a.zoom<0||a.zoom>24))throw new RangeError('invalid_map');
+    if(name==='table_cell'||name==='table_header'){
+      if(!Number.isInteger(a.colspan)||a.colspan<1||a.colspan>20||!Number.isInteger(a.rowspan)||a.rowspan<1||a.rowspan>100)throw new RangeError('invalid_table_span')
+    }
+    if(name==='collage'||name==='slideshow'){
+      if(!Array.isArray(a.items)||a.items.length<1||a.items.length>20||a.items.some(item=>!media(item?.src)))throw new RangeError('invalid_media_group')
+    }
+    if(name==='button_row'){
+      if(!Array.isArray(a.buttons)||a.buttons.length<1||a.buttons.length>20)throw new RangeError('invalid_buttons');
+      for(const button of a.buttons){
+        if(!['url','web_app','copy_text','switch_inline_query','disabled'].includes(String(button?.type||'')))throw new RangeError('invalid_button_type');
+        if((button.type==='url'||button.type==='web_app')&&!/^https?:\/\//i.test(String(button.url||'')))throw new RangeError('invalid_button_url')
+      }
+    }
+  });
+  return node
+}
 function normalizeModel(json){
   if(json===undefined||json===null)return structuredClone(EMPTY);
-  try{return schema.nodeFromJSON(json).toJSON()}catch{throw new Error('invalid_semantic_model')}
+  try{return assertSafeModel(schema.nodeFromJSON(json)).toJSON()}catch{throw new Error('invalid_semantic_model')}
 }
 function toHtml(json){
   const node=schema.nodeFromJSON(normalizeModel(json)),frag=DOMSerializer.fromSchema(schema).serializeFragment(node.content);
