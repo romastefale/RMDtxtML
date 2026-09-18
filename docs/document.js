@@ -26,6 +26,8 @@ function normalize(input,{normalizeModel=defaultNormalize,migrateHtml}={}){
   doc.id=typeof src.id==='string'&&src.id?src.id:doc.id;
   doc.options.isRtl=src.options?.isRtl===true||src.rtl===true;
   doc.options.skipEntityDetection=src.options?.skipEntityDetection===true||src.skipEntityDetection===true;
+  if(src.schema===SCHEMA&&src.migration&&typeof src.migration==='object')doc.migration=clone(src.migration);
+  else if(legacy!==null)doc.migration={fromSchema:Number.isSafeInteger(Number(src.schema))?Number(src.schema):0,at:now(),original:clone(src)};
   const created=src.meta?.createdAt;doc.meta.createdAt=typeof created==='string'&&created?created:doc.meta.createdAt;
   const rev=Number(src.meta?.revision);doc.meta.revision=Number.isSafeInteger(rev)&&rev>=0?rev:0;
   if(Array.isArray(src.revisions))doc.revisions=src.revisions.slice(-MAX_REVISIONS).map(r=>{
