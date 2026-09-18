@@ -1,4 +1,4 @@
-import {Schema,DOMParser as PMDOMParser,DOMSerializer,Slice} from 'prosemirror-model';
+import {Schema,DOMParser as PMDOMParser,DOMSerializer} from 'prosemirror-model';
 import {EditorState} from 'prosemirror-state';
 import {EditorView} from 'prosemirror-view';
 import {history,undo,redo} from 'prosemirror-history';
@@ -332,11 +332,6 @@ class Editor{
     )));
     return this.insertNode(list)
   }
-  insert(html){
-    const parsed=schema.nodeFromJSON(parseHtml(html)),slice=new Slice(parsed.content,0,0);
-    this.view.dispatch(this.view.state.tr.replaceSelection(slice).scrollIntoView());this.view.focus()
-  }
-  blockHtml(html){this.insert(html)}
   undo(){const ok=undo(this.view.state,this.view.dispatch,this.view);if(ok)this.view.focus();return ok}
   redo(){const ok=redo(this.view.state,this.view.dispatch,this.view);if(ok)this.view.focus();return ok}
   destroy(){this.view.destroy()}
