@@ -29,6 +29,9 @@ test('editor UI reports formatting and block state',async()=>{
   assert.match(app,/core\.hasFormat\(tag,r\)/);
   assert.match(app,/blockLabel/);
   assert.match(app,/aria-pressed/);
+  assert.match(app,/\$\$\('\[data-cmd\]'\)\.forEach/);
+  assert.match(app,/\$\$\('\[data-action\]'\)\.forEach/);
+  assert.doesNotMatch(app,/\$\('\[data-cmd\]'\)\.forEach|\$\('\[data-action\]'\)\.forEach/);
   assert.doesNotMatch(app,/textContent='✕'/)
 });
 
