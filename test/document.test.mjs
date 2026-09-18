@@ -23,7 +23,7 @@ async function runtime(){
 
 test('document format is semantic schema 2 and round-trips',async()=>{
   const{RMD}=await runtime();
-  const doc=RMD.normalizeDocument({schema:2,format:'semantic',content:{model:model('Oi')},options:{isRtl:true}},{normalizeModel,migrateHtml});
+  const doc=RMD.normalizeDocument({schema:2,format:'semantic',content:{model:model('Oi'),modelVersion:2},options:{isRtl:true}},{normalizeModel,migrateHtml});
   assert.equal(doc.schema,2);assert.equal(doc.format,'semantic');
   assert.deepEqual(doc.content.model,model('Oi'));assert.equal(doc.content.modelVersion,2);assert.equal(RMD.DOCUMENT_MODEL_VERSION,2);assert.equal(doc.options.isRtl,true);
   assert.equal('html' in doc.content,false);
@@ -70,7 +70,7 @@ test('document restore creates a new revision from a semantic checkpoint',async(
 
 test('transfer adoption preserves identity while converting HTML to semantic model',async()=>{
   const{RMD}=await runtime();
-  const current=RMD.normalizeDocument({schema:2,format:'semantic',id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',content:{model:model('Local')},meta:{revision:2}},{normalizeModel,migrateHtml});
+  const current=RMD.normalizeDocument({schema:2,format:'semantic',id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',content:{model:model('Local'),modelVersion:2},meta:{revision:2}},{normalizeModel,migrateHtml});
   const semantic=model('Semântico');
   const adopted=RMD.adoptTransferDocument(current,{html:'<h2>HTML descartável</h2>',semantic:{schema:2,format:'semantic',modelVersion:2,model:semantic},isRtl:true,document:{id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',revision:7}},{normalizeModel,migrateHtml});
   assert.equal(adopted.id,'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');assert.equal(adopted.meta.revision,7);
