@@ -205,3 +205,5 @@ async function initDocument(){
 }
 syncTheme();themeQuery.addEventListener?.('change',syncTheme);tg?.onEvent?.('themeChanged',syncTheme);
 RMD.ready=initDocument();
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')persistDocument({label:'Salvo automaticamente'}).catch(()=>{})});
+window.addEventListener('pagehide',()=>{persistDocument({label:'Salvo automaticamente'}).catch(()=>{})});
