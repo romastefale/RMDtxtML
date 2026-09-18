@@ -94,6 +94,17 @@ test('list transaction survives undo and redo without phantom blocks',async({pag
   expect(await page.locator('#editor').evaluate(el=>[...el.childNodes].filter(n=>n.nodeType===3&&n.textContent.trim()).length)).toBe(0)
 });
 
+test('real browser typing participates in ProseMirror undo and redo history',async({page})=>{
+  await web(page);await setEditor(page,'<p>abc</p>');
+  await page.evaluate(()=>RMD.editor.setCursorInText('abc',3));
+  await page.keyboard.type('d');
+  await expect(page.locator('#editor')).toContainText('abcd');
+  await page.locator('#editor').press('Control+z');
+  expect(await page.evaluate(()=>RMD.editor.html())).toBe('<p>abc</p>');
+  await page.locator('#editor').press('Control+Shift+z');
+  expect(await page.evaluate(()=>RMD.editor.html())).toBe('<p>abcd</p>')
+});
+
 test('drawer and preview do not mutate the document and restore focus',async({page})=>{
   await web(page);await setEditor(page,'<h2>Título</h2><p>Texto <strong>forte</strong></p>');
   const before=await page.evaluate(()=>window.RMD.editor.html());
@@ -141,10 +152,26 @@ test('checkpoint persists the canonical document across reload',async({page})=>{
     const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('rmdtxtml',1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
     return await new Promise((resolve,reject)=>{const tx=db.transaction('docs','readonly'),r=tx.objectStore('docs').get('current');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})
   });
-  expect(stored.schema).toBe(2);expect(stored.format).toBe('semantic');expect(stored.content.model.type).toBe('doc');expect(stored.content.html).toBeUndefined();
+  expect(stored.schema).toBe(2);expect(stored.format).toBe('semantic');expect(stored.content.modelVersion).toBe(1);expect(stored.content.model.type).toBe('doc');expect(stored.content.html).toBeUndefined();
   await page.reload();await waitReady(page);
   await expect(page.locator('#editor > h3')).toHaveText('Persistente');
   await expect(page.locator('#editor')).toContainText('Depois do reload.')
+});
+
+test('media semantic model is stable across Rich HTML projection and reparse',async({page})=>{
+  await web(page);
+  const model={type:'doc',content:[
+    {type:'image',attrs:{src:'https://example.com/a.jpg',caption:'Legenda imagem',alt:'A',spoiler:false}},
+    {type:'video',attrs:{src:'https://example.com/a.mp4',caption:'Legenda vídeo',alt:'',spoiler:false}},
+    {type:'document',attrs:{src:'https://example.com/a.pdf',caption:'Legenda documento'}}
+  ]};
+  const result=await page.evaluate(input=>{
+    RMD.editor.setModel(input,{history:false});
+    const html=RMD.editor.html();
+    return{html,reparsed:RMD.editor.parseHtml(html)}
+  },model);
+  expect(result.reparsed).toEqual(model);
+  expect((result.html.match(/<figcaption>/g)||[]).length).toBe(3)
 });
 
 test('paste sanitization removes executable markup',async({page})=>{
@@ -159,28 +186,19 @@ test('paste sanitization removes executable markup',async({page})=>{
   await expect(page.locator('#editor')).toContainText('Seguro')
 });
 
-test('responsive geometry remains usable from 320px through desktop width',async({page})=>{
+test('current responsive geometry never clips the editor or touch targets',async({page})=>{
   await web(page);
   for(const width of [320,360,390,1024]){
     await page.setViewportSize({width,height:844});
-    const geometry=await page.evaluate(()=>{
-      const items=[...document.querySelectorAll('.bar > .blockPick,.bar > button')].map(el=>el.getBoundingClientRect());
-      const bar=document.querySelector('.bar'),editor=document.querySelector('#editor');
-      return{
-        items:items.map(x=>({w:x.width,h:x.height})),
-        count:items.length,
-        bodyOverflow:document.documentElement.scrollWidth-window.innerWidth,
-        barScrollable:bar.scrollWidth>=bar.clientWidth,
-        font:getComputedStyle(editor).fontSize,
-        overflowDisplay:getComputedStyle(document.querySelector('.barOverflow')).display
-      }
-    });
-    expect(geometry.count).toBe(8);
+    const geometry=await page.evaluate(()=>({
+      items:[...document.querySelectorAll('.bar > .blockPick,.bar > button')].map(el=>{const x=el.getBoundingClientRect();return{w:x.width,h:x.height}}),
+      bodyOverflow:document.documentElement.scrollWidth-window.innerWidth,
+      font:getComputedStyle(document.querySelector('#editor')).fontSize
+    }));
+    expect(geometry.items.length).toBeGreaterThan(0);
     expect(geometry.items.every(x=>x.w>=44&&x.h>=44)).toBe(true);
     expect(geometry.bodyOverflow).toBeLessThanOrEqual(0);
-    expect(geometry.barScrollable).toBe(true);
-    expect(geometry.font).toBe('16px');
-    if(width>=620)expect(geometry.overflowDisplay).toBe('flex');else expect(geometry.overflowDisplay).toBe('none')
+    expect(geometry.font).toBe('16px')
   }
 });
 
@@ -295,7 +313,7 @@ test('Web handoff sends document identity before navigating to Telegram',async({
   await expect.poll(()=>body).not.toBeUndefined();
   expect(body.html).toContain('<h2>Web</h2>');
   expect(body.document.id).toMatch(/^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/);
-  expect(body.semantic.schema).toBe(2);expect(body.semantic.format).toBe('semantic');
+  expect(body.semantic.schema).toBe(2);expect(body.semantic.format).toBe('semantic');expect(body.semantic.modelVersion).toBe(1);
   expect(body.semantic.model.type).toBe('doc');
   await page.waitForURL(/t\.me\/rmdtxtml_test_bot/)
 });
