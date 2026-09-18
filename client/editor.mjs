@@ -255,9 +255,14 @@ class Editor{
   parseHtml(html){return parseHtml(html)}
   html(){return toHtml(this.model())}
   stats(){
-    const doc=this.view.state.doc;let blocks=0;
-    doc.descendants(node=>{if(node.isBlock||node.type.name==='list_item')blocks++});
-    return{text:[...nodeText(doc)].length,blocks}
+    const doc=this.view.state.doc;let blocks=0,meaningful=false;
+    const atomContent=new Set(['divider','math_inline','math_block','custom_emoji','time','image','video','audio','document','map','collage','slideshow','details','button_row']);
+    doc.descendants(node=>{
+      if(node.isBlock||node.type.name==='list_item')blocks++;
+      if(node.isText&&node.text?.trim())meaningful=true;
+      else if(atomContent.has(node.type.name))meaningful=true
+    });
+    return{text:[...nodeText(doc)].length,blocks,empty:!meaningful}
   }
   setModel(json,{history=true}={}){
     const doc=schema.nodeFromJSON(normalizeModel(json));
