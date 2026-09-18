@@ -7,7 +7,7 @@ import {Store} from './store.mjs';
 import {publicDestinations,resolveDestination,telegramCall,validateInitData,validateRichHtml} from './telegram.mjs';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../docs');
-const version=process.env.APP_VERSION||'1.0.0';
+const version=process.env.APP_VERSION||'1.1.0-rc.1';
 const port=Number(process.env.PORT||3000),maxBody=512*1024;
 const mime=new Map([
   ['.html','text/html; charset=utf-8'],['.js','text/javascript; charset=utf-8'],['.css','text/css; charset=utf-8'],
