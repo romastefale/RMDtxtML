@@ -51,3 +51,11 @@ test('menu actions receive currentColor SVG iconography',async()=>{
   assert.match(css,/\.grid \.menuIcon/);
   assert.match(css,/stroke:currentColor/)
 });
+
+
+test('every declared drawer action has an implementation',async()=>{
+  const [html,app]=await Promise.all([read('docs/index.html'),read('docs/app.js')]);
+  const declared=[...html.matchAll(/data-action="([^"]+)"/g)].map(m=>m[1]);
+  const body=app.slice(app.indexOf('const actions={'),app.indexOf("$$('[data-action]').forEach"));
+  for(const action of declared)assert.match(body,new RegExp('(?:^|\\n\\s*)'+action+':'),`missing action: ${action}`)
+});
