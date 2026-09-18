@@ -37,6 +37,17 @@ class Editor{
   remember(){const r=this.range();if(r)this.saved=r.cloneRange();return this.saved}
   restore(){if(!this.saved||!inside(this.root,this.saved.startContainer)||!inside(this.root,this.saved.endContainer))return false;const s=getSelection();s.removeAllRanges();s.addRange(this.saved.cloneRange());return true}
   focus(){this.root.focus({preventScroll:true});this.restore()}
+  pathMark(r=this.range()){
+    if(!r)return null;
+    const path=node=>{const out=[];while(node&&node!==this.root){const p=node.parentNode;if(!p)return null;out.unshift([...p.childNodes].indexOf(node));node=p}return node===this.root?out:null};
+    return {start:path(r.startContainer),startOffset:r.startOffset,end:path(r.endContainer),endOffset:r.endOffset};
+  }
+  restorePath(mark){
+    if(!mark?.start||!mark?.end)return false;
+    const node=path=>{let n=this.root;for(const i of path){n=n?.childNodes?.[i];if(!n)return null}return n},sn=node(mark.start),en=node(mark.end);if(!sn||!en)return false;
+    const limit=(n,o)=>n.nodeType===Node.TEXT_NODE?Math.min(o,n.data.length):Math.min(o,n.childNodes.length);
+    try{const r=document.createRange();r.setStart(sn,limit(sn,mark.startOffset));r.setEnd(en,limit(en,mark.endOffset));this.select(r);return true}catch{return false}
+  }
   textMark(r=this.range()){
     if(!r)return null;
     const pos=(node,offset)=>{const x=document.createRange();x.selectNodeContents(this.root);try{x.setEnd(node,offset)}catch{return 0}return x.toString().length};
@@ -53,22 +64,24 @@ class Editor{
   end(){
     const r=document.createRange();r.selectNodeContents(this.root);r.collapse(false);this.select(r);return r
   }
-  state(){return{html:this.root.innerHTML,mark:this.textMark()}}
+  state(){return{html:this.root.innerHTML,mark:this.pathMark()}}
   record(force=false){
     const s=this.state(),last=this.past.at(-1);
     if(force||!last||last.html!==s.html){this.past.push(s);if(this.past.length>100)this.past.shift();this.future.length=0}
   }
   commit(){clearTimeout(this.timer);this.timer=0;this.record()}
   afterInput(){
-    const mark=this.textMark();this.normalize();this.restoreText(mark);
-    this.remember();clearTimeout(this.timer);this.timer=setTimeout(()=>this.record(),320);this.change();
+    const mark=this.textMark(),changed=this.normalize();if(changed)this.restoreText(mark);else this.remember();
+    clearTimeout(this.timer);this.timer=setTimeout(()=>this.record(),320);this.change();
   }
   normalize(){
+    let changed=false;
     for(const n of [...this.root.childNodes]){
-      if(n.nodeType===Node.TEXT_NODE&&n.data.trim()){const p=document.createElement('p');n.replaceWith(p);p.append(n)}
-      else if(n.nodeType===Node.ELEMENT_NODE&&n.tagName==='DIV'){const p=document.createElement('p');while(n.firstChild)p.append(n.firstChild);n.replaceWith(p)}
+      if(n.nodeType===Node.TEXT_NODE&&n.data.trim()){const p=document.createElement('p');n.replaceWith(p);p.append(n);changed=true}
+      else if(n.nodeType===Node.ELEMENT_NODE&&n.tagName==='DIV'){const p=document.createElement('p');while(n.firstChild)p.append(n.firstChild);n.replaceWith(p);changed=true}
     }
-    if(!this.root.childNodes.length)this.root.innerHTML='<p><br></p>';
+    if(!this.root.childNodes.length){this.root.innerHTML='<p><br></p>';changed=true}
+    return changed;
   }
   mutate(fn,{mark=true}={}){
     this.commit();this.restore();const before=mark?this.textMark():null;this.lock=true;
@@ -146,7 +159,7 @@ class Editor{
     this.commit();const next=this.future.pop();if(!next)return false;this.past.push(next);this.apply(next);return true
   }
   apply(state){
-    this.lock=true;this.root.innerHTML=state.html;this.lock=false;this.restoreText(state.mark);this.change();this.root.focus({preventScroll:true})
+    this.lock=true;this.root.innerHTML=state.html;this.lock=false;if(!this.restorePath(state.mark))this.end();this.change();this.root.focus({preventScroll:true})
   }
 }
 window.RMD=window.RMD||{};window.RMD.Editor=Editor;
